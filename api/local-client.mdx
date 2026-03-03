@@ -1,0 +1,285 @@
+---
+title: 'LocalClient'
+description: 'Browser-based local file system client using File System Access API'
+---
+
+# LocalClient
+
+`LocalClient` extends [MediaClient](/api/media-client) to provide integration with local file systems using the browser's File System Access API. It creates in-memory video records from File objects and uses Blob URLs for playback.
+
+## Overview
+
+LocalClient is designed for browser-based local folder access without requiring a server. It:
+
+- Works with browser File System Access API or file input
+- Creates Blob URLs for video playback
+- Stores favorites in localStorage
+- Filters videos by supported extensions
+- Manages memory by revoking old Blob URLs
+
+## Constructor
+
+```typescript
+constructor(config: ServerConfig, files: File[] = [])
+```
+
+<ParamField path="config" type="ServerConfig" required>
+  Server configuration with `serverType: 'local'`
+</ParamField>
+
+<ParamField path="files" type="File[]" default="[]">
+  Array of File objects from file input or File System Access API
+</ParamField>
+
+### Implementation
+
+From `LocalClient.ts:45-51`:
+
+```typescript
+constructor(config: ServerConfig, files: File[] = []) {
+  super(config);
+  const { records, urls } = this.buildRecords(files);
+  this.records = records;
+  this.videoUrlMap = new Map(records.map((record) => [record.item.Id, record.objectUrl]));
+  this.replaceObjectUrls(urls);
+}
+```
+
+## Methods
+
+### authenticate
+
+```typescript
+async authenticate(username: string): Promise<ServerConfig>
+```
+
+Returns a local server configuration. No actual authentication is performed.
+
+<ParamField path="username" type="string">
+  Display name for local user (defaults to "Local User")
+</ParamField>
+
+**Returns:** Promise resolving to ServerConfig with `serverType: 'local'`
+
+**Example:**
+
+```typescript
+const config = await localClient.authenticate('My Videos');
+// {
+//   url: 'local://folder',
+//   username: 'My Videos',
+//   token: '',
+//   userId: 'local-user',
+//   serverType: 'local'
+// }
+```
+
+### getLibraries
+
+```typescript
+async getLibraries(): Promise<EmbyLibrary[]>
+```
+
+Returns a single library representing local videos.
+
+**Returns:** Array with one library: `{ Id: 'local-library', Name: '本地视频' }`
+
+**Example:**
+
+```typescript
+const libraries = await localClient.getLibraries();
+// [{ Id: 'local-library', Name: '本地视频' }]
+```
+
+### getVideos
+
+```typescript
+async getVideos(
+  parentId: string | undefined,
+  libraryName: string,
+  feedType: FeedType,
+  skip: number,
+  limit: number,
+  orientationMode: OrientationMode
+): Promise<VideoResponse>
+```
+
+Retrieves videos from local file records with filtering and pagination.
+
+<ParamField path="feedType" type="FeedType">
+  - `latest` - Videos sorted by file modification time (newest first)
+  - `random` - Shuffled selection of videos
+  - `favorites` - Only favorited videos from localStorage
+</ParamField>
+
+<ParamField path="orientationMode" type="OrientationMode">
+  Filter by video dimensions (vertical/horizontal/both)
+</ParamField>
+
+<ParamField path="skip" type="number">
+  Number of items to skip (for pagination)
+</ParamField>
+
+<ParamField path="limit" type="number">
+  Maximum number of items to return
+</ParamField>
+
+**Returns:** VideoResponse with filtered and paginated items
+
+**Implementation details:**
+
+From `LocalClient.ts:67-103`:
+
+- Filters by favorites if `feedType === 'favorites'`
+- Filters by orientation mode
+- Shuffles for random mode
+- Sorts by lastModified for latest mode
+
+### getVideoUrl
+
+```typescript
+getVideoUrl(item: EmbyItem): string
+```
+
+Returns the Blob URL for a video item.
+
+<ParamField path="item" type="EmbyItem" required>
+  Video item to get URL for
+</ParamField>
+
+**Returns:** Blob URL string (e.g., `blob:http://localhost:5173/abc-123`)
+
+**Example:**
+
+```typescript
+const url = localClient.getVideoUrl(videoItem);
+// "blob:http://localhost:5173/550e8400-e29b-41d4-a716-446655440000"
+```
+
+### getImageUrl
+
+```typescript
+getImageUrl(itemId: string, tag?: string, type?: 'Primary' | 'Backdrop'): string
+```
+
+Returns empty string as local mode doesn't support thumbnails.
+
+**Returns:** Empty string
+
+### getFavorites
+
+```typescript
+async getFavorites(libraryName: string): Promise<Set<string>>
+```
+
+Reads favorites from localStorage.
+
+**Returns:** Set of video item IDs marked as favorite
+
+**Storage key:** `embytokLocalFavorites` (from `LocalClient.ts:22`)
+
+### toggleFavorite
+
+```typescript
+async toggleFavorite(
+  itemId: string,
+  isFavorite: boolean,
+  libraryName: string
+): Promise<void>
+```
+
+Adds or removes a video from localStorage favorites.
+
+<ParamField path="itemId" type="string" required>
+  ID of the video to toggle
+</ParamField>
+
+<ParamField path="isFavorite" type="boolean" required>
+  Current favorite state (true = remove, false = add)
+</ParamField>
+
+## Supported Video Formats
+
+From `LocalClient.ts:24-36`:
+
+```typescript
+const VIDEO_EXTENSIONS = new Set([
+  'mp4', 'mkv', 'avi', 'mov', 'webm',
+  'm4v', 'flv', 'wmv', 'ts', 'm2ts', '3gp'
+]);
+```
+
+**Special handling:**
+- `.ts` files must be ≥5MB to avoid false positives with TypeScript files
+
+## Memory Management
+
+LocalClient manages Blob URLs to prevent memory leaks:
+
+From `LocalClient.ts:167-172`:
+
+```typescript
+private replaceObjectUrls(nextUrls: string[]): void {
+  LocalClient.activeObjectUrls.forEach((url) => {
+    URL.revokeObjectURL(url);
+  });
+  LocalClient.activeObjectUrls = new Set(nextUrls);
+}
+```
+
+When switching folders or reloading, old Blob URLs are revoked and replaced with new ones.
+
+## Item ID Generation
+
+Each local video gets a unique ID based on:
+
+From `LocalClient.ts:179-181`:
+
+```typescript
+private buildItemId(relativePath: string, file: File): string {
+  return `local:${encodeURIComponent(relativePath)}:${file.size}:${file.lastModified}`;
+}
+```
+
+This ensures stable IDs across sessions if the same files are loaded.
+
+## Usage Example
+
+```typescript
+import { ClientFactory } from './services/clientFactory';
+
+// Get files from File System Access API
+const dirHandle = await window.showDirectoryPicker();
+const files = await loadVideoFilesFromDirectory(dirHandle);
+
+// Create local client
+const config = {
+  url: 'local://folder',
+  username: 'Local User',
+  token: '',
+  userId: 'local-user',
+  serverType: 'local'
+};
+
+const client = ClientFactory.create(config, { localFiles: files });
+
+// Browse videos
+const { items, totalCount } = await client.getVideos(
+  undefined,
+  '本地视频',
+  'latest',
+  0,
+  20,
+  'vertical'
+);
+
+// Get playback URL
+const videoUrl = client.getVideoUrl(items[0]);
+// Use videoUrl in <video> element
+```
+
+## Related
+
+- [MediaClient](/api/media-client) - Base class reference
+- [Local Folders Guide](/guides/local-folders) - Complete guide to using local folder mode
+- [Types](/api/types) - Type definitions

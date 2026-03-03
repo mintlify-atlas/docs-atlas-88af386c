@@ -76,7 +76,8 @@
               "api/media-client",
               "api/emby-client",
               "api/plex-client",
-              "api/folder-client"
+              "api/folder-client",
+              "api/local-client"
             ]
           },
           {

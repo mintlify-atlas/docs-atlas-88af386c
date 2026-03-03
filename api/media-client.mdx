@@ -5,7 +5,11 @@ description: Abstract base class for all media server clients in EmbyTok
 
 ## Overview
 
-`MediaClient` is the abstract base class that defines the common interface for all media server implementations (Emby, Plex, FolderServer). All client implementations must extend this class and implement its abstract methods.
+`MediaClient` is the abstract base class that defines the common interface for all media server implementations (Emby, Plex, FolderServer, Local). All client implementations must extend this class and implement its abstract methods.
+
+<Note>
+In most cases, you should use `ClientFactory` to create client instances rather than instantiating clients directly. The factory handles authentication and returns the appropriate client type based on the server configuration.
+</Note>
 
 ## Constructor
 
@@ -238,4 +242,5 @@ const videos = await client.getVideos(
 - [EmbyClient](/api/emby-client) - Emby/Jellyfin implementation
 - [PlexClient](/api/plex-client) - Plex Media Server implementation
 - [FolderServerClient](/api/folder-client) - Folder streaming server implementation
+- [LocalClient](/api/local-client) - Local file system implementation
 - [Types](/api/types) - Type definitions
