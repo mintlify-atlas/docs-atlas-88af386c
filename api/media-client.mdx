@@ -1,0 +1,241 @@
+---
+title: MediaClient
+description: Abstract base class for all media server clients in EmbyTok
+---
+
+## Overview
+
+`MediaClient` is the abstract base class that defines the common interface for all media server implementations (Emby, Plex, FolderServer). All client implementations must extend this class and implement its abstract methods.
+
+## Constructor
+
+```typescript
+constructor(config: ServerConfig)
+```
+
+<ParamField path="config" type="ServerConfig" required>
+  Server configuration object containing connection details
+</ParamField>
+
+### Example
+
+```typescript
+import { MediaClient } from './services/MediaClient';
+import { ServerConfig } from './types';
+
+const config: ServerConfig = {
+  url: 'https://emby.example.com',
+  username: 'user',
+  token: 'abc123',
+  userId: 'user-id',
+  serverType: 'emby'
+};
+
+// Extended by specific implementations
+const client = new EmbyClient(config);
+```
+
+## Properties
+
+<ResponseField name="config" type="ServerConfig">
+  The server configuration passed to the constructor
+</ResponseField>
+
+## Abstract Methods
+
+All extending classes must implement these methods:
+
+### authenticate
+
+Authenticates a user with the media server.
+
+```typescript
+abstract authenticate(username: string, password: string): Promise<ServerConfig>
+```
+
+<ParamField path="username" type="string" required>
+  Username for authentication
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  Password or API token for authentication
+</ParamField>
+
+<ResponseField name="return" type="Promise<ServerConfig>">
+  Returns updated server configuration with authentication token and user ID
+</ResponseField>
+
+### getLibraries
+
+Fetches all available media libraries from the server.
+
+```typescript
+abstract getLibraries(): Promise<EmbyLibrary[]>
+```
+
+<ResponseField name="return" type="Promise<EmbyLibrary[]>">
+  Array of library objects containing Id, Name, and CollectionType
+</ResponseField>
+
+### getVideos
+
+Fetches videos from a library with pagination and filtering.
+
+```typescript
+abstract getVideos(
+  parentId: string | undefined,
+  libraryName: string,
+  feedType: FeedType,
+  skip: number,
+  limit: number,
+  orientationMode: OrientationMode
+): Promise<VideoResponse>
+```
+
+<ParamField path="parentId" type="string | undefined">
+  Library ID to fetch from, or undefined for favorites feed
+</ParamField>
+
+<ParamField path="libraryName" type="string" required>
+  Name of the library for playlist/favorites management
+</ParamField>
+
+<ParamField path="feedType" type="FeedType" required>
+  Type of feed: 'latest', 'random', or 'favorites'
+</ParamField>
+
+<ParamField path="skip" type="number" required>
+  Number of items to skip for pagination
+</ParamField>
+
+<ParamField path="limit" type="number" required>
+  Maximum number of items to return
+</ParamField>
+
+<ParamField path="orientationMode" type="OrientationMode" required>
+  Filter by video orientation: 'vertical', 'horizontal', or 'both'
+</ParamField>
+
+<ResponseField name="return" type="Promise<VideoResponse>">
+  Object containing items array, nextStartIndex, and totalCount
+</ResponseField>
+
+### getVideoUrl
+
+Generates the streaming URL for a video item.
+
+```typescript
+abstract getVideoUrl(item: EmbyItem): string
+```
+
+<ParamField path="item" type="EmbyItem" required>
+  Video item to generate URL for
+</ParamField>
+
+<ResponseField name="return" type="string">
+  Streaming URL for the video
+</ResponseField>
+
+### getImageUrl
+
+Generates the URL for a video thumbnail or backdrop image.
+
+```typescript
+abstract getImageUrl(
+  itemId: string,
+  tag?: string,
+  type?: 'Primary' | 'Backdrop'
+): string
+```
+
+<ParamField path="itemId" type="string" required>
+  ID of the media item
+</ParamField>
+
+<ParamField path="tag" type="string">
+  Image tag/hash for cache busting
+</ParamField>
+
+<ParamField path="type" type="'Primary' | 'Backdrop'" default="'Primary'">
+  Type of image to fetch
+</ParamField>
+
+<ResponseField name="return" type="string">
+  URL for the image
+</ResponseField>
+
+### getFavorites
+
+Fetches the set of favorited item IDs for a library.
+
+```typescript
+abstract getFavorites(libraryName: string): Promise<Set<string>>
+```
+
+<ParamField path="libraryName" type="string" required>
+  Name of the library
+</ParamField>
+
+<ResponseField name="return" type="Promise<Set<string>>">
+  Set of item IDs that are favorited
+</ResponseField>
+
+### toggleFavorite
+
+Toggles the favorite status of a video item.
+
+```typescript
+abstract toggleFavorite(
+  itemId: string,
+  isFavorite: boolean,
+  libraryName: string
+): Promise<void>
+```
+
+<ParamField path="itemId" type="string" required>
+  ID of the item to toggle
+</ParamField>
+
+<ParamField path="isFavorite" type="boolean" required>
+  Current favorite status (true means currently favorited)
+</ParamField>
+
+<ParamField path="libraryName" type="string" required>
+  Name of the library for playlist management
+</ParamField>
+
+## Usage with ClientFactory
+
+```typescript
+import { ClientFactory } from './services/clientFactory';
+import { ServerConfig } from './types';
+
+// Authenticate and get config
+const config = await ClientFactory.authenticate(
+  'emby',
+  'https://emby.example.com',
+  'username',
+  'password'
+);
+
+// Create client instance
+const client = ClientFactory.create(config);
+
+// Use client methods
+const libraries = await client.getLibraries();
+const videos = await client.getVideos(
+  libraries[0].Id,
+  libraries[0].Name,
+  'latest',
+  0,
+  15,
+  'vertical'
+);
+```
+
+## See Also
+
+- [EmbyClient](/api/emby-client) - Emby/Jellyfin implementation
+- [PlexClient](/api/plex-client) - Plex Media Server implementation
+- [FolderServerClient](/api/folder-client) - Folder streaming server implementation
+- [Types](/api/types) - Type definitions

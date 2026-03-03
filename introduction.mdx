@@ -1,0 +1,189 @@
+---
+title: Introduction
+description: A TikTok-style vertical video browser for Emby, Jellyfin, Plex, and local media servers
+---
+
+# Welcome to EmbyTok
+
+EmbyTok is a modern vertical video browser designed for media servers, bringing a TikTok-style browsing experience to your personal media library. Swipe through your videos with an intuitive, mobile-first interface that makes consuming your media collection feel fresh and engaging.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="TikTok-Style Browsing" icon="mobile">
+    Full-screen vertical video browsing with swipe gestures to navigate between videos
+  </Card>
+  
+  <Card title="Multi-Server Support" icon="server">
+    Works with Emby, Jellyfin, Plex, local folders, and LAN file servers
+  </Card>
+  
+  <Card title="Smart Video Filtering" icon="filter">
+    Filter videos by orientation (vertical, horizontal, or both) to match your viewing preference
+  </Card>
+  
+  <Card title="Favorites & Playlists" icon="heart">
+    Like and save your favorite videos with automatic playlist management
+  </Card>
+  
+  <Card title="Multiple Browse Modes" icon="shuffle">
+    Choose from Latest, Random, or Favorites feeds to discover content
+  </Card>
+  
+  <Card title="Adaptive Layout" icon="display">
+    Seamlessly switch between feed view and grid view for different browsing experiences
+  </Card>
+  
+  <Card title="Auto-Play Mode" icon="play">
+    Continuous playback with a clean, distraction-free interface
+  </Card>
+  
+  <Card title="Cross-Platform" icon="devices">
+    Available as a web app, PWA, Android app (via Capacitor), and native iOS app (UIKit)
+  </Card>
+</CardGroup>
+
+## Browse Modes
+
+EmbyTok offers three ways to explore your media:
+
+- **Latest**: Browse videos sorted by date added (newest first) with infinite scrolling
+- **Random**: Discover content with randomized recommendations
+- **Favorites**: Access your liked videos in one place
+
+## Multi-Server Architecture
+
+EmbyTok supports multiple backend options:
+
+<CardGroup cols={2}>
+  <Card title="Emby & Jellyfin" icon="video">
+    Native integration with Emby and Jellyfin media servers using their REST APIs
+  </Card>
+  
+  <Card title="Plex" icon="film">
+    Connect to Plex servers using X-Plex-Token authentication
+  </Card>
+  
+  <Card title="Local Folders" icon="folder">
+    Browse videos directly from your device's file system (browser-based)
+  </Card>
+  
+  <Card title="LAN File Server" icon="network-wired">
+    Self-hosted file server mode for sharing videos across your local network
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+Built with modern web technologies:
+
+- **React 18** with TypeScript for type-safe development
+- **Vite** for lightning-fast builds and hot module replacement
+- **Tailwind CSS** for responsive, utility-first styling
+- **Capacitor** for building native Android apps
+- **UIKit + AVFoundation** for native iOS playback
+- **Docker** with multi-architecture support (AMD64/ARM64)
+
+## Core Implementation
+
+EmbyTok uses a client factory pattern to support multiple server types. Here's how it authenticates:
+
+```typescript components/Login.tsx
+const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
+  setError('');
+
+  const formattedUrl = normalizeServerUrl(serverUrl);
+  const folderServiceSecret = isFolderServerMode ? selectedFolderServiceId : password;
+
+  try {
+    const config = await ClientFactory.authenticate(
+      serverType, 
+      formattedUrl, 
+      username, 
+      folderServiceSecret
+    );
+    onLogin(config);
+  } catch (err: any) {
+    console.error(err);
+    setError('Connection failed. Please check your server details.');
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+## Orientation-Aware Filtering
+
+EmbyTok intelligently filters videos based on aspect ratio:
+
+```typescript services/EmbyClient.ts
+private filterItems(items: EmbyItem[], mode: OrientationMode): EmbyItem[] {
+  if (mode === 'both') return items;
+  
+  return items.filter(item => {
+    const w = item.Width || 0;
+    const h = item.Height || 0;
+    if (w === 0) return true; // Keep items with no metadata
+    
+    if (mode === 'vertical') {
+      return h >= w * 0.8; // Allow slightly wide videos (4:5 ratio)
+    } else if (mode === 'horizontal') {
+      return w > h;
+    }
+    return true;
+  });
+}
+```
+
+## Video Prefetching
+
+For smooth playback, EmbyTok prefetches upcoming videos:
+
+```typescript components/VideoFeed.tsx
+const PREFETCH_AHEAD = 5;
+const SAFARI_PREFETCH_AHEAD = 2;
+
+const userAgent = navigator.userAgent;
+const isSafari = /Safari/i.test(userAgent) && 
+  !/Chrome|CriOS|Edg|OPR|FxiOS|Chromium/i.test(userAgent);
+
+const prefetchAhead = isSafari ? SAFARI_PREFETCH_AHEAD : PREFETCH_AHEAD;
+const prefetchVideoMode = isSafari ? 'metadata' : 'auto';
+
+for (let index = activeIndex + 1; index < end; index += 1) {
+  const item = videos[index];
+  const url = client.getVideoUrl(item);
+  
+  const prefetchVideo = document.createElement('video');
+  prefetchVideo.preload = prefetchVideoMode;
+  prefetchVideo.muted = true;
+  prefetchVideo.src = url;
+  prefetchVideo.load();
+}
+```
+
+## Get Started
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Get up and running with EmbyTok in 5 minutes
+  </Card>
+  
+  <Card title="Docker Deployment" icon="docker" href="/installation/docker">
+    Deploy EmbyTok on your NAS or server with Docker
+  </Card>
+  
+  <Card title="iOS Native App" icon="mobile" href="/installation/ios">
+    Build and install the native iOS app with UIKit
+  </Card>
+  
+  <Card title="Configuration" icon="gear" href="/configuration/server-setup">
+    Configure server connections and customize your experience
+  </Card>
+</CardGroup>
+
+<Note>
+EmbyTok is an unofficial client and is not affiliated with Emby, Jellyfin, or Plex. Please ensure you comply with your local laws and regulations when using this software.
+</Note>

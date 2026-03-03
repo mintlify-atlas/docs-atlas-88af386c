@@ -1,0 +1,415 @@
+---
+title: Android App Installation
+description: Build native Android APK using Capacitor and Android Studio
+---
+
+EmbyTok can be built as a native Android application using Capacitor, which wraps the web app in a native container with access to device features.
+
+## Prerequisites
+
+Before building the Android app, ensure you have:
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    Version 14 or higher (v20 recommended)
+  </Card>
+  <Card title="Android Studio" icon="android">
+    Latest stable version with Android SDK
+  </Card>
+  <Card title="Java JDK" icon="java">
+    JDK 17 or higher
+  </Card>
+  <Card title="Android SDK" icon="mobile">
+    API Level 22+ (Android 5.1+)
+  </Card>
+</CardGroup>
+
+## Installation Steps
+
+<Steps>
+  <Step title="Clone and install dependencies">
+    If you haven't already, clone the repository and install dependencies:
+
+    <CodeGroup>
+      ```bash npm
+      git clone https://github.com/your-username/embytok.git
+      cd embytok
+      npm install
+      ```
+
+      ```bash yarn
+      git clone https://github.com/your-username/embytok.git
+      cd embytok
+      yarn install
+      ```
+
+      ```bash pnpm
+      git clone https://github.com/your-username/embytok.git
+      cd embytok
+      pnpm install
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Add Android platform (first time only)">
+    Add the Android platform to your project:
+
+    ```bash
+    npm run cap:add
+    # or use Capacitor CLI directly
+    npx cap add android
+    ```
+
+    This creates the `android/` directory with a native Android project.
+  </Step>
+
+  <Step title="Build the web app">
+    Build the optimized web assets:
+
+    ```bash
+    npm run build
+    ```
+
+    This compiles TypeScript and creates production bundles in `dist/`.
+  </Step>
+
+  <Step title="Sync web assets to Android">
+    Copy the built web files to the Android project:
+
+    ```bash
+    npm run cap:sync
+    # or use Capacitor CLI directly
+    npx cap sync android
+    ```
+
+    This command:
+    - Copies `dist/` to `android/app/src/main/assets/public/`
+    - Updates native dependencies
+    - Syncs Capacitor configuration
+  </Step>
+</Steps>
+
+<Note>
+  You can combine steps 3 and 4 with the convenience command:
+  ```bash
+  npm run build:android
+  ```
+  This runs `tsc && vite build && cap sync android` in one command.
+</Note>
+
+## Capacitor Configuration
+
+The app is configured in `capacitor.config.ts`:
+
+```typescript capacitor.config.ts
+import { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.embytok.app',
+  appName: 'EmbyTok',
+  webDir: 'dist',
+  server: {
+    androidScheme: 'https'
+  },
+  plugins: {
+    CapacitorHttp: {
+      enabled: true,
+    },
+  },
+};
+
+export default config;
+```
+
+**Key settings**:
+- **appId**: `com.embytok.app` - Unique Android package identifier
+- **appName**: `EmbyTok` - Display name on device
+- **webDir**: `dist` - Built web assets directory
+- **androidScheme**: `https` - Uses HTTPS scheme for web content
+- **CapacitorHttp**: Enabled for native HTTP requests
+
+<Warning>
+  If you fork the project, change `appId` to a unique identifier (e.g., `com.yourname.embytok`) to avoid conflicts.
+</Warning>
+
+## Building APK with Android Studio
+
+<Steps>
+  <Step title="Open project in Android Studio">
+    Launch Android Studio and open the Android project:
+
+    ```bash
+    npx cap open android
+    ```
+
+    Or manually open the `android/` directory in Android Studio.
+  </Step>
+
+  <Step title="Configure build variant">
+    In Android Studio:
+    1. Select **Build > Select Build Variant**
+    2. Choose **release** for production builds or **debug** for testing
+  </Step>
+
+  <Step title="Generate APK">
+    Build the APK:
+    1. Select **Build > Build Bundle(s) / APK(s) > Build APK(s)**
+    2. Wait for the build to complete
+    3. Click **locate** in the notification to find the APK
+
+    The APK will be in:
+    ```
+    android/app/build/outputs/apk/release/app-release.apk
+    ```
+  </Step>
+
+  <Step title="Sign the APK (release builds)">
+    For production release:
+    1. Select **Build > Generate Signed Bundle / APK**
+    2. Choose **APK** and click **Next**
+    3. Create or select a keystore
+    4. Enter keystore password and key alias
+    5. Select **release** build variant
+    6. Choose signature versions (V1 and V2)
+    7. Click **Finish**
+  </Step>
+</Steps>
+
+## Building from Command Line
+
+You can also build APK without Android Studio:
+
+### Debug APK
+
+```bash
+cd android
+./gradlew assembleDebug
+```
+
+Output: `android/app/build/outputs/apk/debug/app-debug.apk`
+
+### Release APK (unsigned)
+
+```bash
+cd android
+./gradlew assembleRelease
+```
+
+Output: `android/app/build/outputs/apk/release/app-release-unsigned.apk`
+
+### Sign APK Manually
+
+Sign the release APK using `apksigner`:
+
+```bash
+# Align the APK
+zipalign -v -p 4 app-release-unsigned.apk app-release-aligned.apk
+
+# Sign with your keystore
+apksigner sign --ks my-release-key.jks \
+  --out app-release-signed.apk \
+  app-release-aligned.apk
+
+# Verify signature
+apksigner verify app-release-signed.apk
+```
+
+## Installing on Device
+
+### Via USB (Development)
+
+<Steps>
+  <Step title="Enable developer options">
+    On your Android device:
+    1. Go to **Settings > About phone**
+    2. Tap **Build number** 7 times
+    3. Enable **Developer options**
+    4. Enable **USB debugging**
+  </Step>
+
+  <Step title="Connect device">
+    Connect your Android device via USB and authorize the computer.
+
+    Verify connection:
+    ```bash
+    adb devices
+    ```
+  </Step>
+
+  <Step title="Run from Android Studio">
+    In Android Studio:
+    1. Select your device from the device dropdown
+    2. Click the **Run** button (green play icon)
+
+    Or use command line:
+    ```bash
+    cd android
+    ./gradlew installDebug
+    ```
+  </Step>
+</Steps>
+
+### Via APK File
+
+1. Transfer the APK to your device
+2. Open the APK file on your device
+3. Allow installation from unknown sources if prompted
+4. Tap **Install**
+
+<Warning>
+  Installing APKs from unknown sources requires enabling "Install unknown apps" permission for your file manager.
+</Warning>
+
+## Live Reload Development
+
+For faster development, use live reload:
+
+<Steps>
+  <Step title="Start dev server with LAN access">
+    ```bash
+    npm run dev:lan
+    ```
+
+    Note the local network IP (e.g., `http://192.168.1.100:5173`)
+  </Step>
+
+  <Step title="Update capacitor.config.ts">
+    Add server configuration:
+
+    ```typescript
+    server: {
+      url: 'http://192.168.1.100:5173',
+      cleartext: true
+    }
+    ```
+  </Step>
+
+  <Step title="Sync and run">
+    ```bash
+    npx cap sync android
+    npx cap run android
+    ```
+
+    The app will load content from your dev server with hot reload.
+  </Step>
+</Steps>
+
+<Note>
+  Remember to remove the `server.url` configuration before building production APK.
+</Note>
+
+## Customization
+
+### App Name and Icon
+
+Modify Android app metadata:
+
+1. **App name**: Edit `android/app/src/main/res/values/strings.xml`
+2. **Package name**: Change `appId` in `capacitor.config.ts`, then sync
+3. **App icon**: Replace icons in `android/app/src/main/res/mipmap-*/`
+
+### Permissions
+
+EmbyTok requires these permissions (automatically added by Capacitor):
+
+```xml android/app/src/main/AndroidManifest.xml
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+```
+
+Add additional permissions if needed for future features.
+
+### Supported Android Versions
+
+- **Minimum SDK**: API 22 (Android 5.1 Lollipop)
+- **Target SDK**: API 34 (Android 14)
+- **Compile SDK**: API 34
+
+Modify in `android/app/build.gradle` if needed.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build fails with 'capacitor' not found">
+    **Solution**: Ensure Capacitor is installed:
+    ```bash
+    npm install @capacitor/core @capacitor/cli @capacitor/android
+    ```
+  </Accordion>
+
+  <Accordion title="Gradle build fails">
+    **Common fixes**:
+    1. Update Gradle wrapper:
+       ```bash
+       cd android
+       ./gradlew wrapper --gradle-version=8.0
+       ```
+    2. Clean build:
+       ```bash
+       ./gradlew clean
+       ./gradlew assembleDebug
+       ```
+    3. Invalidate caches in Android Studio: **File > Invalidate Caches / Restart**
+  </Accordion>
+
+  <Accordion title="App shows blank screen">
+    **Solution**: Verify web assets were synced:
+    ```bash
+    npm run build
+    npx cap sync android
+    ```
+    Check that `android/app/src/main/assets/public/` contains your built files.
+  </Accordion>
+
+  <Accordion title="adb devices shows no devices">
+    **Solution**:
+    1. Enable USB debugging on device
+    2. Try different USB cable
+    3. Restart adb server:
+       ```bash
+       adb kill-server
+       adb start-server
+       ```
+  </Accordion>
+
+  <Accordion title="Network requests fail in app">
+    **Solution**: Check network security configuration. For HTTP (non-HTTPS) servers, add to `android/app/src/main/res/xml/network_security_config.xml`:
+    ```xml
+    <?xml version="1.0" encoding="utf-8"?>
+    <network-security-config>
+        <domain-config cleartextTrafficPermitted="true">
+            <domain includeSubdomains="true">your-server-ip</domain>
+        </domain-config>
+    </network-security-config>
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Publishing to Google Play
+
+To publish EmbyTok to Google Play Store:
+
+1. **Create signed release APK or AAB** (Android App Bundle recommended)
+2. **Create Google Play Developer account** ($25 one-time fee)
+3. **Create app listing** with screenshots and descriptions
+4. **Upload APK/AAB** for internal testing, then production
+5. **Submit for review**
+
+See [Android Developer documentation](https://developer.android.com/studio/publish) for detailed publishing guide.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="iOS App" icon="apple" href="/installation/ios">
+    Build native iOS app with UIKit
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/server-setup">
+    Configure Emby/Plex servers
+  </Card>
+  <Card title="Capacitor Plugins" icon="plug" href="/installation/android">
+    Add native device features
+  </Card>
+  <Card title="Mobile Guide" icon="mobile" href="/features/video-browsing">
+    Using EmbyTok on mobile devices
+  </Card>
+</CardGroup>

@@ -1,0 +1,728 @@
+---
+title: Network Deployment Guide
+description: Deploy EmbyTok on your LAN using Docker for multi-device access with folder server mode
+---
+
+# Network Deployment Guide
+
+Deploy EmbyTok on your local network so multiple devices can access your video library through a single server instance. This guide covers Docker deployment, network configuration, and the folder server mode for serving local files.
+
+## Overview
+
+EmbyTok can run as a network service that provides:
+
+1. **Web Interface**: Static site serving the EmbyTok UI
+2. **Folder Server API**: REST API for browsing and streaming local video files
+3. **Multi-Device Access**: Any device on your network can connect via browser
+
+<Note>
+This deployment mode is ideal for home networks where you want to share a local video library across phones, tablets, and computers without setting up a full media server like Emby or Plex.
+</Note>
+
+## Deployment Options
+
+### Option 1: Docker Compose (Recommended)
+
+Best for: Production deployments on NAS, Linux servers, or desktops
+
+### Option 2: Docker Run
+
+Best for: Quick testing or single-container deployments
+
+### Option 3: Node.js Direct
+
+Best for: Development or systems without Docker
+
+## Prerequisites
+
+- Docker and Docker Compose installed (for Docker deployment)
+- Node.js 14+ and npm (for Node.js deployment)
+- A folder containing video files you want to serve
+- Local network with devices on the same subnet
+
+## Docker Compose Deployment
+
+### Step 1: Prepare Media Folder
+
+Create or identify a folder with your videos:
+
+```bash
+# Example: organize your videos
+mkdir -p ~/media/vertical-videos
+mkdir -p ~/media/horizontal-videos
+```
+
+Your folder structure might look like:
+```
+~/media/
+├── vertical-videos/
+│   ├── dance.mp4
+│   ├── comedy/
+│   │   ├── skit1.mp4
+│   │   └── skit2.mp4
+│   └── travel/
+│       └── timelapse.mp4
+└── horizontal-videos/
+    └── vlog.mp4
+```
+
+### Step 2: Create docker-compose.yml
+
+From the repository's `docker-compose.yml:1-22`:
+
+```yaml
+services:
+  embytok:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: embytok:local
+    container_name: embytok
+    restart: unless-stopped
+    ports:
+      - "${EMBYTOK_PORT:-5176}:5176"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "5176"
+      SERVE_WEB: "true"
+      WEB_ROOT: "/app/dist"
+      LAN_CONFIG_FILE: "/app/data/lan-media-config.json"
+      MEDIA_ROOT: "/media"
+      BROWSE_ROOTS: "/media"
+    volumes:
+      - "./lan-media-config.json:/app/data/lan-media-config.json"
+      - "${EMBYTOK_MEDIA_PATH:-./media}:/media:ro"
+```
+
+### Step 3: Configure Environment Variables
+
+Create a `.env` file in the same directory:
+
+```bash
+# Port to expose EmbyTok on
+EMBYTOK_PORT=5176
+
+# Path to your video folder on the host
+EMBYTOK_MEDIA_PATH=/home/user/media
+```
+
+<Warning>
+**Critical**: The container path must be `/media`. EmbyTok's folder server expects files at this path inside the container. The `EMBYTOK_MEDIA_PATH` variable maps your host folder to `/media` in the container.
+</Warning>
+
+### Step 4: Create Config File
+
+Create an empty config file for persistence:
+
+```bash
+touch lan-media-config.json
+```
+
+This file will store your folder service configurations. It starts empty and gets populated through the admin panel.
+
+### Step 5: Start the Container
+
+```bash
+# Build and start
+docker compose up -d --build
+
+# View logs
+docker compose logs -f embytok
+
+# Check status
+docker compose ps
+```
+
+You should see output like:
+```
+[Folder Server] Listening on 0.0.0.0:5176
+[Folder Server] Network URLs:
+  Local:   http://localhost:5176
+  Network: http://192.168.1.50:5176
+```
+
+### Step 6: Access from Network
+
+Open a browser on any device on your network and navigate to:
+
+```
+http://192.168.1.50:5176
+```
+
+(Replace with your server's actual IP address)
+
+## Docker Run Deployment
+
+For a quick single-command deployment:
+
+```bash
+docker run -d \
+  --name embytok \
+  --restart unless-stopped \
+  -p 5176:5176 \
+  -e HOST=0.0.0.0 \
+  -e PORT=5176 \
+  -e SERVE_WEB=true \
+  -e WEB_ROOT=/app/dist \
+  -e LAN_CONFIG_FILE=/app/data/lan-media-config.json \
+  -e MEDIA_ROOT=/media \
+  -e BROWSE_ROOTS=/media \
+  -v $(pwd)/lan-media-config.json:/app/data/lan-media-config.json \
+  -v /home/user/media:/media:ro \
+  embytok:local
+```
+
+### Building the Image First
+
+If you have the source code:
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd embytok
+
+# Build image
+docker build -t embytok:local .
+
+# Run container
+docker run -d ... (see above)
+```
+
+## Node.js Direct Deployment
+
+Without Docker, you can run EmbyTok using Node.js directly.
+
+<Steps>
+  <Step title="Install Dependencies">
+    ```bash
+    npm install
+    ```
+  </Step>
+  
+  <Step title="Build Frontend">
+    ```bash
+    npm run build
+    ```
+    
+    This creates the `dist/` folder with static files.
+  </Step>
+  
+  <Step title="Start Folder Server">
+    ```bash
+    PORT=5176 \
+    HOST=0.0.0.0 \
+    MEDIA_ROOT=/home/user/media \
+    BROWSE_ROOTS=/home/user/media \
+    npm run lan:server
+    ```
+  </Step>
+</Steps>
+
+The server will output network URLs:
+```
+[Folder Server] Listening on 0.0.0.0:5176
+  Local:   http://localhost:5176
+  Network: http://192.168.1.50:5176
+  Network: http://10.0.0.5:5176
+```
+
+## Environment Variables Reference
+
+From the Docker configuration and README:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HOST` | `0.0.0.0` | Network interface to bind to. Use `0.0.0.0` for all interfaces |
+| `PORT` | `5176` | Port to listen on |
+| `SERVE_WEB` | `true` | Whether to serve the static web UI |
+| `WEB_ROOT` | `dist` | Path to static files (use `/app/dist` in Docker) |
+| `LAN_CONFIG_FILE` | `./lan-media-config.json` | Path to persistent config file |
+| `MEDIA_ROOT` | - | Default media folder for initial service creation |
+| `BROWSE_ROOTS` | - | Comma-separated list of browsable root directories |
+
+### MEDIA_ROOT vs BROWSE_ROOTS
+
+**MEDIA_ROOT**: Used only on first startup to create a default folder service. Optional.
+
+Example:
+```bash
+MEDIA_ROOT=/media
+```
+
+**BROWSE_ROOTS**: Comma-separated list of directories the admin panel can browse. Required for admin functionality.
+
+Example:
+```bash
+BROWSE_ROOTS=/media,/media2,/media3
+```
+
+This allows admins to create multiple folder services pointing to different directories.
+
+<Tip>
+In Docker deployments, always use `/media` as the container path. Map multiple host folders using additional volume mounts:
+
+```yaml
+volumes:
+  - "/host/videos:/media:ro"
+  - "/host/movies:/media2:ro"
+  - "/host/shows:/media3:ro"
+```
+
+Then set:
+```yaml
+BROWSE_ROOTS: "/media,/media2,/media3"
+```
+</Tip>
+
+## Configuring Folder Services
+
+After deployment, configure which folders to serve through the admin panel.
+
+### Accessing Admin Panel
+
+<Steps>
+  <Step title="Navigate to Admin URL">
+    ```
+    http://192.168.1.50:5176/admin
+    ```
+  </Step>
+  
+  <Step title="Enter Admin Password">
+    Default password: `admin`
+    
+    <Warning>
+    The admin password is hardcoded in `Login.tsx:192`. For production deployments, you should modify this or add environment-based authentication.
+    </Warning>
+  </Step>
+  
+  <Step title="Browse and Select Folder">
+    Use the file browser to navigate to your video folder within the `BROWSE_ROOTS` paths.
+  </Step>
+  
+  <Step title="Create Service">
+    - Enter a service name (e.g., "Vertical Videos", "Movies", "TikToks")
+    - Click **Save**
+    - Set as **Current** to make it the default
+  </Step>
+</Steps>
+
+### Multiple Folder Services
+
+You can create multiple services for different video collections:
+
+```json
+// Example lan-media-config.json after setup
+{
+  "services": [
+    {
+      "id": "abc123",
+      "name": "Vertical Videos",
+      "path": "/media/vertical-videos",
+      "isActive": true
+    },
+    {
+      "id": "def456",
+      "name": "Horizontal Videos",
+      "path": "/media/horizontal-videos",
+      "isActive": false
+    }
+  ],
+  "currentServiceId": "abc123"
+}
+```
+
+Clients can then select which service to connect to from the login page.
+
+## Connecting Clients
+
+Once the server is running and configured, connect from any device:
+
+<Steps>
+  <Step title="Open EmbyTok Login">
+    Navigate to `http://192.168.1.50:5176` on your phone, tablet, or computer.
+  </Step>
+  
+  <Step title="Select 'Folder Service' Mode">
+    Click the cyan **Folder Service** button on the login page (from `Login.tsx:365-371`).
+  </Step>
+  
+  <Step title="Enter Server Address">
+    ```
+    http://192.168.1.50:5176
+    ```
+    
+    The server address field auto-fills if you're already on that domain.
+  </Step>
+  
+  <Step title="Select Service Name">
+    Choose from the dropdown list of configured services (e.g., "Vertical Videos").
+    
+    From `Login.tsx:420-435`, the service list is fetched from:
+    ```
+    GET http://192.168.1.50:5176/api/folder/services
+    ```
+  </Step>
+  
+  <Step title="Click Connect">
+    Authentication is validated and you're taken to the video feed.
+  </Step>
+</Steps>
+
+## Folder Server API
+
+The folder server provides several REST endpoints:
+
+### Health Check
+
+```http
+GET /api/folder/ping
+```
+
+Response:
+```json
+{ "ok": true }
+```
+
+### List Services
+
+```http
+GET /api/folder/services
+```
+
+Response:
+```json
+{
+  "items": [
+    {
+      "id": "abc123",
+      "name": "Vertical Videos",
+      "isActive": true
+    }
+  ],
+  "currentServiceId": "abc123"
+}
+```
+
+### List Libraries
+
+```http
+GET /api/folder/libraries?serviceId=abc123
+```
+
+Response:
+```json
+{
+  "items": [
+    {
+      "Id": "root",
+      "Name": "All Videos"
+    }
+  ]
+}
+```
+
+### Fetch Videos
+
+From `FolderServerClient.ts:97-126`:
+
+```http
+GET /api/folder/videos?
+  feedType=latest&
+  skip=0&
+  limit=50&
+  orientationMode=vertical&
+  serviceId=abc123
+```
+
+Response:
+```json
+{
+  "items": [
+    {
+      "Id": "video-id-1",
+      "Name": "dance.mp4",
+      "Type": "Video",
+      "Width": 1080,
+      "Height": 1920
+    }
+  ],
+  "totalCount": 150,
+  "nextStartIndex": 50
+}
+```
+
+### Stream Video
+
+```http
+GET /api/folder/stream/{videoId}?serviceId=abc123
+```
+
+Supports HTTP Range requests for seeking.
+
+## Network Configuration
+
+### Finding Your Server IP
+
+**Linux/Mac:**
+```bash
+ifconfig | grep "inet "
+# or
+ip addr show
+```
+
+**Windows:**
+```cmd
+ipconfig
+```
+
+Look for your local network IP (usually `192.168.x.x` or `10.0.x.x`).
+
+### Firewall Configuration
+
+Ensure port 5176 (or your chosen port) is open:
+
+**Linux (ufw):**
+```bash
+sudo ufw allow 5176/tcp
+```
+
+**Linux (firewalld):**
+```bash
+sudo firewall-cmd --add-port=5176/tcp --permanent
+sudo firewall-cmd --reload
+```
+
+**Windows:**
+1. Windows Defender Firewall → Advanced Settings
+2. Inbound Rules → New Rule
+3. Port → TCP → 5176
+4. Allow the connection
+
+### Testing Connectivity
+
+From another device on the network:
+
+```bash
+# Test if port is reachable
+telnet 192.168.1.50 5176
+
+# Or use curl
+curl http://192.168.1.50:5176/api/folder/ping
+```
+
+## NAS Deployment (Synology, QNAP, etc.)
+
+Special considerations for NAS devices are documented in `docs/DOCKER_NAS.md`.
+
+### Quick NAS Setup
+
+<Steps>
+  <Step title="Pull or Build Image">
+    If your NAS is amd64, pull from GHCR:
+    ```bash
+    docker pull ghcr.io/<owner>/<repo>:main
+    ```
+    
+    Or build locally (if you have source code on NAS):
+    ```bash
+    docker build -t embytok:local .
+    ```
+  </Step>
+  
+  <Step title="Configure Volume Paths">
+    NAS folders often have special paths. Example for Synology:
+    
+    ```bash
+    # Your videos are in /volume1/videos
+    EMBYTOK_MEDIA_PATH=/volume1/videos docker compose up -d
+    ```
+    
+    Or for QNAP:
+    ```bash
+    # Videos in /share/Multimedia
+    EMBYTOK_MEDIA_PATH=/share/Multimedia docker compose up -d
+    ```
+  </Step>
+  
+  <Step title="Set Permissions">
+    Ensure the Docker container can read the media folder:
+    ```bash
+    chmod -R 755 /volume1/videos
+    ```
+  </Step>
+</Steps>
+
+### Common NAS Pitfalls
+
+From `DOCKER_NAS.md:36-51`:
+
+<Warning>
+**Container path must be /media**
+
+Even if your NAS path is `/volume1/videos` or `/vol02/1000-0-c6abec40`, the container internal path must be `/media`:
+
+```yaml
+volumes:
+  - "/vol02/1000-0-c6abec40:/media:ro"
+```
+
+And:
+```yaml
+environment:
+  MEDIA_ROOT: "/media"
+  BROWSE_ROOTS: "/media"
+```
+
+Do NOT set these to the host paths.
+</Warning>
+
+## Cross-Architecture Deployment
+
+If you're building on a Mac (ARM64) but deploying to a NAS (AMD64):
+
+### Using GHCR Multi-Arch Images
+
+The repository auto-builds multi-architecture images on push:
+
+```bash
+# Pull the amd64 version from Mac
+docker pull --platform linux/amd64 ghcr.io/<owner>/<repo>:main
+
+# Save to tar
+docker save -o embytok_amd64.tar ghcr.io/<owner>/<repo>:main
+
+# Transfer to NAS
+scp embytok_amd64.tar user@nas-ip:/volume1/docker/
+
+# Load on NAS
+ssh user@nas-ip
+cd /volume1/docker
+docker load -i embytok_amd64.tar
+```
+
+### Building Locally for Different Architecture
+
+From `DOCKER_NAS.md:124-132`:
+
+```bash
+# Install QEMU for emulation
+brew install qemu
+
+# Start Colima with amd64 profile
+colima start -p amd64 --arch x86_64 --runtime docker
+
+# Point Docker to Colima
+export DOCKER_HOST=unix://$HOME/.colima/amd64/docker.sock
+
+# Build for amd64
+docker build -t embytok:local .
+
+# Save and transfer
+docker save -o embytok_amd64.tar embytok:local
+```
+
+## Advanced: HTTPS/SSL Setup
+
+For secure access, use a reverse proxy like Nginx or Caddy.
+
+### Example: Caddy Reverse Proxy
+
+```caddy
+embytok.local {
+  reverse_proxy localhost:5176
+}
+```
+
+Then access via `https://embytok.local` on your LAN.
+
+### Example: Nginx Reverse Proxy
+
+```nginx
+server {
+  listen 443 ssl;
+  server_name embytok.local;
+  
+  ssl_certificate /path/to/cert.pem;
+  ssl_certificate_key /path/to/key.pem;
+  
+  location / {
+    proxy_pass http://localhost:5176;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+}
+```
+
+## Performance Optimization
+
+### Video Format Recommendations
+
+- **Codec**: H.264 (AVC) for maximum browser compatibility
+- **Container**: MP4
+- **Resolution**: 1080x1920 for vertical videos
+- **Bitrate**: 5-10 Mbps for good quality without excessive file size
+
+### Network Performance
+
+- Use **wired Ethernet** for the server when possible
+- **Wi-Fi 5 (802.11ac)** or better for client devices
+- Keep server and clients on same subnet to avoid routing overhead
+- Consider network quality when setting video bitrates
+
+### Scaling for Many Users
+
+- **CPU**: Video streaming is mostly I/O bound, but thumbnail generation uses CPU
+- **RAM**: Minimal (512MB should suffice for most deployments)
+- **Storage I/O**: SSD recommended for faster directory scanning and thumbnail loading
+- **Network**: Gigabit Ethernet recommended if serving 5+ simultaneous streams
+
+## Troubleshooting
+
+### Container Won't Start
+
+<AccordionGroup>
+  <Accordion title="Port already in use">
+    Check if another service is using port 5176:
+    ```bash
+    lsof -i :5176
+    # or
+    netstat -tuln | grep 5176
+    ```
+    
+    Change to a different port in `.env` or docker-compose.yml.
+  </Accordion>
+  
+  <Accordion title="Permission denied on volume mount">
+    Ensure Docker has permission to read your media folder:
+    ```bash
+    chmod 755 /path/to/media
+    ```
+    
+    On NAS devices, add Docker to appropriate groups.
+  </Accordion>
+</AccordionGroup>
+
+### Videos Not Appearing
+
+- **Check admin panel**: Visit `/admin` and verify services are configured
+- **Verify API**: Test `http://server:5176/api/folder/videos?feedType=latest&serviceId=<id>`
+- **Check container logs**: `docker compose logs embytok`
+- **Verify paths**: Ensure `MEDIA_ROOT` and `BROWSE_ROOTS` point to `/media` inside container
+
+### Slow Performance
+
+- **Enable browser caching**: Ensure static assets are cached
+- **Check network speed**: Use EmbyTok's built-in speed test
+- **Monitor container resources**: `docker stats embytok`
+- **Optimize video files**: Re-encode large files to lower bitrates
+
+## Next Steps
+
+- Configure [Emby integration](/guides/emby-setup) for server-based media libraries
+- Set up [Plex integration](/guides/plex-setup) as an alternative
+- Learn about [local folder browsing](/guides/local-folders) for offline clients
+- [Build the iOS native app](/installation/ios) for native mobile playback
+
+<Tip>
+For home use, running EmbyTok on a NAS or always-on mini PC provides 24/7 access to your video library from any device on your network, without the complexity of setting up a full media server.
+</Tip>

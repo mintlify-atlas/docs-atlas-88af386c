@@ -1,0 +1,457 @@
+---
+title: 'Admin Panel'
+description: 'Manage folder services, configure video streams, and browse server directories'
+---
+
+The Admin Panel provides a web interface for managing the LAN Folder Service. Administrators can configure multiple video stream services, browse server directories, and manage active services.
+
+## Accessing the Admin Panel
+
+There are three ways to access the admin panel:
+
+<Steps>
+  <Step title="Direct URL access">
+    Navigate to `/admin` on your server:
+    ```
+    http://192.168.1.50:5176/admin
+    ```
+  </Step>
+
+  <Step title="From login page">
+    1. Select "Folder Service" mode
+    2. Click "打开管理页面（配置文件夹服务）" button
+    3. Enter admin password when prompted
+  </Step>
+
+  <Step title="From settings menu">
+    1. Log in to any service
+    2. Open the side menu
+    3. Navigate to Settings
+    4. Click "管理员面板" (Admin Panel)
+    5. Enter password
+  </Step>
+</Steps>
+
+### Admin Password
+
+<Warning>
+  The default admin password is `admin`. This is hardcoded in both the login prompt and admin page component.
+  
+  **For production use**, modify the password in:
+  - `components/Login.tsx:192`
+  - `components/AdminPage.tsx:5`
+</Warning>
+
+```typescript
+// Current implementation
+const ADMIN_PASSWORD = 'admin';
+
+const handleOpenAdminPanel = () => {
+  const input = window.prompt('请输入管理员密码');
+  if (input === null) return;
+  if (input !== 'admin') {
+    setError('管理员密码错误');
+    return;
+  }
+  setIsAdminOpen(true);
+};
+```
+
+## Admin Panel Features
+
+The admin interface is implemented in `components/FolderServiceAdmin.tsx` and provides:
+
+### 1. Service Management
+
+View and manage all configured video stream services:
+
+- **Service list** - Shows all services with:
+  - Service name and media root path
+  - Current active service indicator
+  - Video count for each service
+  - Last scan timestamp
+
+- **Active service selection** - Click "设为当前" to make a service active
+
+- **Service deletion** - Remove services you no longer need
+
+### 2. Directory Browser
+
+Browse server directories to find video folders:
+
+- **Root navigation** - Starts from `BROWSE_ROOTS` paths
+- **Subdirectory browsing** - Click folders to navigate deeper
+- **Parent navigation** - "上一级" button to go back
+- **Path display** - Current directory path shown at top
+- **Auto-fill** - Clicking a directory fills the "New Service" path field
+
+### 3. Service Creation
+
+Create new video stream services:
+
+<Steps>
+  <Step title="Enter service name">
+    Choose a descriptive name like "Family Movies" or "TV Shows"
+  </Step>
+
+  <Step title="Select media folder">
+    Either:
+    - Type the absolute path manually
+    - Click a folder in the directory browser (auto-fills)
+  </Step>
+
+  <Step title="Save and activate">
+    Click "保存并设为当前" to:
+    - Create the service
+    - Set it as the active service
+    - Trigger initial scan
+  </Step>
+</Steps>
+
+## API Endpoints
+
+The admin panel uses these API endpoints:
+
+### GET /api/admin/config
+
+Get current configuration and service list.
+
+**Response:**
+```json
+{
+  "currentServiceId": "abc123",
+  "services": [
+    {
+      "id": "abc123",
+      "name": "Movies",
+      "mediaRoot": "/Volumes/Media/Movies",
+      "isActive": true,
+      "videoCount": 150,
+      "lastScanAt": 1699564800000
+    }
+  ],
+  "browseRoots": ["/", "/Volumes"],
+  "rescanMs": 15000
+}
+```
+
+<ParamField path="currentServiceId" type="string">
+  ID of the currently active service
+</ParamField>
+
+<ParamField path="services" type="array">
+  Array of all configured services with metadata
+</ParamField>
+
+<ParamField path="browseRoots" type="array">
+  Allowed root directories for browsing
+</ParamField>
+
+<ParamField path="rescanMs" type="number">
+  Milliseconds between automatic rescans
+</ParamField>
+
+### GET /api/admin/browse
+
+Browse server directories.
+
+**Query params:**
+- `path` (optional): Directory path to browse. Defaults to first `BROWSE_ROOTS`.
+
+**Response:**
+```json
+{
+  "currentPath": "/Volumes/Media",
+  "parentPath": "/Volumes",
+  "directories": [
+    { "name": "Movies", "path": "/Volumes/Media/Movies" },
+    { "name": "TV", "path": "/Volumes/Media/TV" }
+  ]
+}
+```
+
+**Security:**
+- Only paths within `BROWSE_ROOTS` are accessible
+- Attempts to browse outside allowed roots return 403 error
+- Path traversal attacks are prevented
+
+### POST /api/admin/services
+
+Create or update a service.
+
+**Request body:**
+```json
+{
+  "name": "Family Movies",
+  "mediaRoot": "/Volumes/Media/Movies",
+  "setActive": true
+}
+```
+
+<ParamField body="name" type="string" required>
+  Display name for the service
+</ParamField>
+
+<ParamField body="mediaRoot" type="string" required>
+  Absolute path to video directory. Must:
+  - Be an absolute path
+  - Exist and be readable
+  - Be within `BROWSE_ROOTS`
+</ParamField>
+
+<ParamField body="id" type="string">
+  Optional: Service ID for updates. Omit to create new service.
+</ParamField>
+
+<ParamField body="setActive" type="boolean" default="false">
+  Set this service as the current active service
+</ParamField>
+
+**Response:**
+Returns updated admin config (same as GET /api/admin/config)
+
+### POST /api/admin/select
+
+Change the current active service.
+
+**Request body:**
+```json
+{
+  "serviceId": "abc123"
+}
+```
+
+### DELETE /api/admin/services/:serviceId
+
+Delete a service.
+
+**URL params:**
+- `serviceId`: ID of service to delete
+
+**Behavior:**
+- Removes service from configuration
+- Clears its scan cache
+- If deleted service was active, switches to first remaining service
+- Saves updated config to disk
+
+### POST /api/admin/rescan
+
+Force rescan of a service's directory.
+
+**Request body:**
+```json
+{
+  "serviceId": "abc123"
+}
+```
+
+Omit `serviceId` to rescan the current active service.
+
+## Implementation Details
+
+### Service ID Generation
+
+Service IDs are generated using SHA1 hash:
+
+```javascript
+const makeServiceId = (name, mediaRoot) => {
+  return createHash('sha1')
+    .update(`${name}:${mediaRoot}:${Date.now()}:${Math.random()}`)
+    .digest('hex')
+    .slice(0, 16);
+};
+```
+
+This ensures:
+- Unique IDs for each service
+- No collisions even with identical names/paths
+- Short IDs (16 characters)
+
+### Video ID Generation
+
+Each video gets a unique ID based on service and relative path:
+
+```javascript
+const buildVideoId = (serviceId, relativePath) => {
+  return createHash('sha1')
+    .update(`${serviceId}:${relativePath}`)
+    .digest('hex');
+};
+```
+
+### Directory Scanning
+
+The server recursively scans configured directories:
+
+```javascript
+const walkDir = async (service, dirPath, relativeBase, output) => {
+  // Read directory entries
+  const entries = await fsp.readdir(dirPath, { withFileTypes: true });
+  
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      // Recurse into subdirectories
+      await walkDir(service, absPath, relPath, output);
+    }
+    
+    if (entry.isFile()) {
+      // Check if video file
+      const ext = getExt(entry.name);
+      if (VIDEO_EXTENSIONS.has(ext)) {
+        output.push({
+          id: buildVideoId(service.id, relPath),
+          name: entry.name,
+          relPath,
+          absPath,
+          ext,
+          size: stat.size,
+          mtimeMs: stat.mtimeMs,
+          libraryId: `${service.id}:${topFolder}`,
+          libraryName: topFolder
+        });
+      }
+    }
+  }
+};
+```
+
+### Library Organization
+
+Videos are automatically grouped by their top-level directory:
+
+```javascript
+const topFolder = relPath.includes('/') ? relPath.split('/')[0] : '__root__';
+const libraryId = `${service.id}:${topFolder}`;
+const libraryName = topFolder === '__root__' ? '根目录' : topFolder;
+```
+
+This creates virtual "libraries" based on folder structure.
+
+### Scan Caching
+
+Scans are cached to avoid repeated disk I/O:
+
+```javascript
+const ensureScanned = async (serviceId, force = false) => {
+  const scan = getScanState(serviceId);
+  const shouldReuse = !force && (Date.now() - scan.lastScanAt < RESCAN_MS);
+  if (shouldReuse) return;
+  
+  // Perform scan...
+};
+```
+
+- Scans older than `RESCAN_MS` (15 seconds) are automatically refreshed
+- Concurrent scan requests are deduplicated
+- Force rescans bypass the cache
+
+## UI Components
+
+### Service List Card
+
+Displays configured services:
+
+```tsx
+<div className={`rounded-lg p-3 border ${
+  service.isActive 
+    ? 'border-emerald-500/60 bg-emerald-500/10' 
+    : 'border-zinc-800 bg-zinc-900/60'
+}`}>
+  <p className="text-sm font-semibold">{service.name}</p>
+  <p className="text-[11px] text-zinc-500">{service.mediaRoot}</p>
+  <p className="text-[10px] text-zinc-600">视频数: {service.videoCount}</p>
+</div>
+```
+
+### Directory Browser
+
+Shows navigable folder tree:
+
+```tsx
+<button
+  onClick={() => {
+    setServicePath(dir.path);
+    loadBrowse(dir.path);
+  }}
+  className="w-full px-3 py-2 text-left hover:bg-zinc-800/80"
+>
+  <FolderOpen className="w-4 h-4 text-cyan-400" />
+  <span>{dir.name}</span>
+</button>
+```
+
+### Service Creation Form
+
+```tsx
+<input
+  value={servicePath}
+  onChange={(e) => setServicePath(e.target.value)}
+  placeholder="/Volumes/Media/Movies"
+  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg"
+/>
+```
+
+## Security Considerations
+
+<Warning>
+  **Important Security Notes:**
+  
+  1. **Change the default password** before deploying to production
+  2. **Restrict browse roots** - Only allow necessary directories in `BROWSE_ROOTS`
+  3. **Use network isolation** - Run on a trusted LAN only
+  4. **Read-only mounts** - Mount media directories as read-only in Docker
+  5. **No authentication** - The admin panel only requires a password prompt, not session management
+</Warning>
+
+### Path Validation
+
+All paths are validated against allowed browse roots:
+
+```javascript
+const canBrowsePath = (targetPath) => {
+  return BROWSE_ROOTS.some((root) => 
+    isInsideOrEqual(path.resolve(root), path.resolve(targetPath))
+  );
+};
+```
+
+Attempts to access paths outside `BROWSE_ROOTS` return 403 errors.
+
+## Client Integration
+
+The client component `FolderServiceAdmin.tsx` provides:
+
+### Service List Updates
+
+When services are modified, the callback notifies the login page:
+
+```typescript
+const handleServicesUpdated = (
+  services: FolderServiceSummary[], 
+  currentServiceId: string | null
+) => {
+  setFolderServices(services);
+  const current = services.find(s => s.id === currentServiceId) || services[0];
+  setSelectedFolderServiceId(current?.id || '');
+};
+```
+
+### Auto-refresh
+
+The service list auto-refreshes when the server URL changes:
+
+```typescript
+useEffect(() => {
+  if (!isFolderServerMode) return;
+  const timer = setTimeout(() => {
+    loadFolderServices(serverUrl, true);
+  }, 350);
+  return () => clearTimeout(timer);
+}, [isFolderServerMode, serverUrl]);
+```
+
+## Next Steps
+
+- Configure [environment variables](/configuration/folder-service) for your deployment
+- [Set up Docker containers](/installation/docker) for production
+- [Learn about playback controls](/features/playback-controls)

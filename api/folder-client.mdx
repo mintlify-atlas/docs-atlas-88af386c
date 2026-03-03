@@ -1,0 +1,398 @@
+---
+title: FolderServerClient
+description: Client implementation for EmbyTok's folder streaming server
+---
+
+## Overview
+
+`FolderServerClient` extends [MediaClient](/api/media-client) to provide integration with EmbyTok's folder-based streaming server. It supports local file browsing, orientation filtering, and localStorage-based favorites.
+
+## Constructor
+
+```typescript
+import { FolderServerClient } from './services/FolderServerClient';
+
+const client = new FolderServerClient(config);
+```
+
+<ParamField path="config" type="ServerConfig" required>
+  Server configuration with folder server details
+</ParamField>
+
+## Authentication
+
+### authenticate
+
+Connects to the folder server and selects a streaming service.
+
+```typescript
+authenticate(username: string, password: string): Promise<ServerConfig>
+```
+
+<ParamField path="username" type="string" required>
+  Username (used for display, defaults to 'Folder User')
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  Service ID or name to use (optional - will use current/first service if not provided)
+</ParamField>
+
+<ResponseField name="url" type="string">
+  Server URL
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  Username or 'Folder User' if not provided
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  Selected service ID
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  Service ID (used for API requests)
+</ResponseField>
+
+<ResponseField name="serverType" type="'folder'">
+  Always returns 'folder'
+</ResponseField>
+
+### Example
+
+```typescript
+const config: ServerConfig = {
+  url: 'http://localhost:3000',
+  username: '',
+  token: '',
+  userId: '',
+  serverType: 'folder'
+};
+
+const client = new FolderServerClient(config);
+
+// Connect to server (auto-selects service)
+const authConfig = await client.authenticate('User', '');
+
+// Or specify a service
+const authConfig = await client.authenticate('User', 'service-id-123');
+```
+
+## Library Management
+
+### getLibraries
+
+Fetches available folder libraries from the server.
+
+```typescript
+getLibraries(): Promise<EmbyLibrary[]>
+```
+
+<ResponseField name="return" type="Promise<EmbyLibrary[]>">
+  Array of library objects
+</ResponseField>
+
+### Example
+
+```typescript
+const libraries = await client.getLibraries();
+
+libraries.forEach(lib => {
+  console.log(`${lib.Name} (${lib.Id})`);
+});
+```
+
+## Video Retrieval
+
+### getVideos
+
+Fetches videos from the folder server with server-side filtering.
+
+```typescript
+getVideos(
+  parentId: string | undefined,
+  libraryName: string,
+  feedType: FeedType,
+  skip: number,
+  limit: number,
+  orientationMode: OrientationMode
+): Promise<VideoResponse>
+```
+
+<ParamField path="parentId" type="string | undefined">
+  Library ID to fetch from (optional for favorites)
+</ParamField>
+
+<ParamField path="libraryName" type="string" required>
+  Library name (not used, included for interface compatibility)
+</ParamField>
+
+<ParamField path="feedType" type="FeedType" required>
+  - `'latest'`: Server-side latest sort
+  - `'random'`: Server-side random shuffle
+  - `'favorites'`: Client-side filtering from localStorage
+</ParamField>
+
+<ParamField path="skip" type="number" required>
+  Starting index for pagination
+</ParamField>
+
+<ParamField path="limit" type="number" required>
+  Number of items to return
+</ParamField>
+
+<ParamField path="orientationMode" type="OrientationMode" required>
+  Server-side orientation filter: 'vertical', 'horizontal', or 'both'
+</ParamField>
+
+<ResponseField name="items" type="EmbyItem[]">
+  Array of video items
+</ResponseField>
+
+<ResponseField name="totalCount" type="number">
+  Total number of items available
+</ResponseField>
+
+<ResponseField name="nextStartIndex" type="number">
+  Index for the next page
+</ResponseField>
+
+### Example
+
+```typescript
+const response = await client.getVideos(
+  'library-123',
+  '',
+  'latest',
+  0,
+  15,
+  'vertical'
+);
+
+console.log(`Loaded ${response.items.length} of ${response.totalCount} videos`);
+```
+
+<Note>
+  For favorites feed, the client fetches up to 5000 items and filters client-side using localStorage favorites.
+</Note>
+
+## Media URLs
+
+### getVideoUrl
+
+Generates streaming URL for a video file.
+
+```typescript
+getVideoUrl(item: EmbyItem): string
+```
+
+<ParamField path="item" type="EmbyItem" required>
+  Video item to stream
+</ParamField>
+
+<ResponseField name="return" type="string">
+  Streaming endpoint URL with service ID
+</ResponseField>
+
+### getImageUrl
+
+Not supported for folder server (returns empty string).
+
+```typescript
+getImageUrl(
+  itemId: string,
+  tag?: string,
+  type?: 'Primary' | 'Backdrop'
+): string
+```
+
+<ResponseField name="return" type="string">
+  Always returns empty string
+</ResponseField>
+
+### Example
+
+```typescript
+const videoUrl = client.getVideoUrl(video);
+// http://localhost:3000/api/folder/stream/video-id-123?serviceId=service-id
+
+const thumbnailUrl = client.getImageUrl(video.Id);
+// '' (empty - no thumbnails for folder server)
+```
+
+## Favorites Management
+
+FolderServerClient stores favorites in localStorage instead of server-side playlists.
+
+### getFavorites
+
+Retrieves favorited item IDs from localStorage.
+
+```typescript
+getFavorites(libraryName: string): Promise<Set<string>>
+```
+
+<ParamField path="libraryName" type="string" required>
+  Library name (not used, included for interface compatibility)
+</ParamField>
+
+<ResponseField name="return" type="Promise<Set<string>>">
+  Set of item IDs stored in localStorage
+</ResponseField>
+
+### toggleFavorite
+
+Toggles favorite status in localStorage.
+
+```typescript
+toggleFavorite(
+  itemId: string,
+  isFavorite: boolean,
+  libraryName: string
+): Promise<void>
+```
+
+<ParamField path="itemId" type="string" required>
+  Video item ID
+</ParamField>
+
+<ParamField path="isFavorite" type="boolean" required>
+  Current status: true = remove from favorites, false = add to favorites
+</ParamField>
+
+<ParamField path="libraryName" type="string" required>
+  Library name (not used, included for interface compatibility)
+</ParamField>
+
+### Example
+
+```typescript
+// Load favorites
+const favoriteIds = await client.getFavorites('');
+console.log(`${favoriteIds.size} favorites`);
+
+// Toggle favorite
+const isFavorite = favoriteIds.has(video.Id);
+await client.toggleFavorite(video.Id, isFavorite, '');
+```
+
+### Storage Key Format
+
+```
+embytokFolderFavorites:{serverUrl}:{serviceId}
+```
+
+This allows different favorite lists per server and service.
+
+## Complete Usage Example
+
+```typescript
+import { ClientFactory } from './services/clientFactory';
+
+// Authenticate with folder server
+const config = await ClientFactory.authenticate(
+  'folder',
+  'http://localhost:3000',
+  'User',
+  '' // Auto-select service
+);
+
+const client = ClientFactory.create(config);
+
+// Get libraries
+const libraries = await client.getLibraries();
+const firstLib = libraries[0];
+
+// Load latest vertical videos
+const { items, totalCount } = await client.getVideos(
+  firstLib.Id,
+  '',
+  'latest',
+  0,
+  15,
+  'vertical'
+);
+
+// Check favorites
+const favoriteIds = await client.getFavorites('');
+
+items.forEach(video => {
+  const url = client.getVideoUrl(video);
+  const isFav = favoriteIds.has(video.Id);
+  
+  console.log(`${video.Name} - Favorite: ${isFav}`);
+  console.log(`Stream: ${url}`);
+});
+
+// Add first video to favorites
+await client.toggleFavorite(items[0].Id, false, '');
+```
+
+## API Endpoints
+
+The client communicates with these folder server endpoints:
+
+### Ping
+```
+GET /api/folder/ping
+Response: { ok: boolean }
+```
+
+### Services
+```
+GET /api/folder/services
+Response: {
+  items: Array<{ id: string, name: string, isActive?: boolean }>,
+  currentServiceId?: string
+}
+```
+
+### Libraries
+```
+GET /api/folder/libraries?serviceId={serviceId}
+Response: { items: EmbyLibrary[] }
+```
+
+### Videos
+```
+GET /api/folder/videos?serviceId={serviceId}&libraryId={libraryId}&feedType={feedType}&skip={skip}&limit={limit}&orientationMode={orientationMode}
+Response: {
+  items: EmbyItem[],
+  totalCount: number,
+  nextStartIndex: number
+}
+```
+
+### Stream
+```
+GET /api/folder/stream/{itemId}?serviceId={serviceId}
+Response: Video file stream
+```
+
+## Implementation Details
+
+### Service ID
+
+The service ID is stored in both `token` and `userId` fields of ServerConfig and appended to all API requests as a query parameter.
+
+### Favorites Storage
+
+Favorites are stored in localStorage as JSON arrays:
+```json
+["video-id-1", "video-id-2", "video-id-3"]
+```
+
+### Favorites Feed
+
+When `feedType === 'favorites'`, the client:
+1. Fetches up to 5000 items from the 'latest' feed
+2. Filters client-side using localStorage favorites
+3. Paginates the filtered results
+
+This approach works well for moderate-sized libraries.
+
+## See Also
+
+- [MediaClient](/api/media-client) - Base class reference
+- [EmbyClient](/api/emby-client) - Emby/Jellyfin implementation
+- [PlexClient](/api/plex-client) - Plex implementation
+- [Types](/api/types) - Type definitions

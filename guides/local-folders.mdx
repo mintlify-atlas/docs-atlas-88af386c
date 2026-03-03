@@ -1,0 +1,532 @@
+---
+title: Local Folders Guide
+description: Browse local video files using the browser's File System Access API with persistent directory access
+---
+
+# Local Folders Guide
+
+EmbyTok can browse and play videos directly from your local file system without requiring a media server. This mode uses the browser's File System Access API for secure, sandboxed access to your files.
+
+## Browser Compatibility
+
+The File System Access API is supported in:
+
+- ✅ Chrome/Edge 86+
+- ✅ Opera 72+
+- ❌ Firefox (not yet supported)
+- ❌ Safari (not yet supported)
+
+<Warning>
+Local folder mode requires a Chromium-based browser (Chrome, Edge, Opera, Brave, etc.). Firefox and Safari users should use the fallback folder upload method.
+</Warning>
+
+## Two Methods of Local Access
+
+EmbyTok provides two ways to access local videos:
+
+### 1. Startup Directory (Recommended)
+
+Uses the File System Access API to remember your video folder across browser sessions.
+
+**Benefits:**
+- Persistent access after granting permission once
+- Automatically loads on subsequent visits
+- Supports deep directory traversal
+- No file copying required
+
+### 2. One-Time Folder Upload (Fallback)
+
+Uses the traditional file input with `webkitdirectory` attribute.
+
+**Benefits:**
+- Works in more browsers
+- No persistent permissions needed
+- Simple one-click access
+
+## Setting Up Startup Directory
+
+<Steps>
+  <Step title="Open EmbyTok Login">
+    Navigate to EmbyTok and select the **Local** tab (green button).
+  </Step>
+  
+  <Step title="Click 'Select and Set as Startup Directory'">
+    This opens the browser's directory picker dialog.
+  </Step>
+  
+  <Step title="Choose Your Video Folder">
+    Navigate to and select the folder containing your videos. This can be any folder on your computer.
+    
+    Example folders:
+    - `~/Videos/TikTok`
+    - `/Volumes/Media/Vertical Videos`
+    - `D:\Videos\Shorts`
+  </Step>
+  
+  <Step title="Grant Permission">
+    The browser will ask for permission to read the folder. Click **Allow** or **View files**.
+  </Step>
+  
+  <Step title="Wait for Scan">
+    EmbyTok recursively scans all subdirectories for video files. Large folders may take a few seconds.
+  </Step>
+</Steps>
+
+<Note>
+The permission and folder handle are stored in IndexedDB. The next time you visit EmbyTok, click **Use Configured Startup Directory** to instantly load your videos (if permission is still granted).
+</Note>
+
+## How It Works: File System Access API
+
+The startup directory feature uses several browser APIs from `localFolderService.ts`:
+
+### Picking a Directory
+
+From `localFolderService.ts:156-168`:
+
+```typescript
+const pickDirectoryHandle = async () => {
+  if (typeof window.showDirectoryPicker !== 'function') {
+    return null;
+  }
+  
+  try {
+    return await window.showDirectoryPicker({ mode: 'read' });
+  } catch (error) {
+    // User cancelled the picker
+    if (error.name === 'AbortError') return null;
+    throw error;
+  }
+}
+```
+
+### Requesting Permissions
+
+From `localFolderService.ts:133-150`:
+
+```typescript
+const requestDirectoryPermission = async (handle) => {
+  const result = await handle.requestPermission({ mode: 'read' });
+  // result can be: 'granted', 'prompt', or 'denied'
+  return result;
+}
+```
+
+### Persisting the Handle
+
+The directory handle is saved to IndexedDB from `localFolderService.ts:182-184`:
+
+```typescript
+const saveStartupDirectoryHandle = async (handle) => {
+  await runWrite('startup-folder', handle);
+}
+```
+
+Database structure:
+- **Database**: `embytok-local-folder-db`
+- **Object Store**: `folder-handles`
+- **Key**: `startup-folder`
+- **Value**: DirectoryHandle object
+
+### Recursive Directory Walking
+
+From `localFolderService.ts:105-131`:
+
+```typescript
+const walkDirectory = async (dirHandle, currentPath, output) => {
+  for await (const [name, entry] of dirHandle.entries()) {
+    const relativePath = currentPath ? `${currentPath}/${name}` : name;
+    
+    if (entry.kind === 'directory') {
+      // Recurse into subdirectory
+      await walkDirectory(entry, relativePath, output);
+      continue;
+    }
+    
+    if (entry.kind === 'file') {
+      const file = await entry.getFile();
+      if (isVideoFile(file)) {
+        output.push(setRelativePath(file, relativePath));
+      }
+    }
+  }
+}
+```
+
+This recursively scans all subdirectories and extracts video files.
+
+## Supported Video Formats
+
+From `localFolderService.ts:5-17`:
+
+```typescript
+const VIDEO_EXTENSIONS = new Set([
+  'mp4', 'mkv', 'avi', 'mov', 'webm',
+  'm4v', 'flv', 'wmv', 'ts', 'm2ts', '3gp'
+])
+```
+
+### Special Case: .ts Files
+
+TypeScript files (.ts) can collide with MPEG transport stream files. EmbyTok filters by size:
+
+```typescript
+const TS_VIDEO_MIN_BYTES = 5 * 1024 * 1024; // 5 MB
+
+if (ext === 'ts' && file.size < TS_VIDEO_MIN_BYTES) {
+  return false; // Likely a TypeScript file, not a video
+}
+```
+
+## Building the Video Library
+
+Once files are loaded, EmbyTok creates in-memory video records from `LocalClient.ts:127-165`:
+
+```typescript
+const buildRecords = (files) => {
+  const records = files
+    .filter(file => isVideoFile(file))
+    .map(file => {
+      const relativePath = getRelativePath(file);
+      const id = buildItemId(relativePath, file);
+      const objectUrl = URL.createObjectURL(file);
+      
+      const item = {
+        Id: id,
+        Name: getDisplayName(file.name),
+        Type: 'Video',
+        MediaType: 'Video',
+        Overview: relativePath,
+        ProductionYear: extractYear(file.lastModified),
+        MediaSources: [{
+          Id: id,
+          Container: getExtension(file.name),
+          Path: relativePath,
+          Protocol: 'File'
+        }]
+      };
+      
+      return {
+        item,
+        objectUrl,
+        lastModified: file.lastModified
+      };
+    })
+    .sort((a, b) => b.lastModified - a.lastModified);
+    
+  return { records, urls: records.map(r => r.objectUrl) };
+}
+```
+
+### Video ID Generation
+
+From `LocalClient.ts:179-181`:
+
+```typescript
+const buildItemId = (relativePath, file) => {
+  return `local:${encodeURIComponent(relativePath)}:${file.size}:${file.lastModified}`;
+}
+```
+
+Example ID:
+```
+local:Videos%2FShorts%2Fvideo1.mp4:15728640:1638360000000
+```
+
+## Video Playback
+
+Local videos play using blob URLs created from the File objects:
+
+```typescript
+// From LocalClient.ts:105-107
+getVideoUrl(item) {
+  return this.videoUrlMap.get(item.Id) || '';
+}
+```
+
+The `videoUrlMap` stores blob URLs:
+```
+blob:http://localhost:5173/550e8400-e29b-41d4-a716-446655440000
+```
+
+### Memory Management
+
+Blob URLs are cleaned up when switching folders from `LocalClient.ts:167-172`:
+
+```typescript
+const replaceObjectUrls = (nextUrls) => {
+  // Revoke all previous blob URLs
+  LocalClient.activeObjectUrls.forEach(url => {
+    URL.revokeObjectURL(url);
+  });
+  LocalClient.activeObjectUrls = new Set(nextUrls);
+}
+```
+
+<Warning>
+Blob URLs consume browser memory. Very large video libraries (1000+ files) may impact performance. Consider using a media server for large collections.
+</Warning>
+
+## Local Favorites
+
+Favorites for local folders are stored in browser `localStorage`:
+
+```typescript
+// From LocalClient.ts:22
+const LOCAL_FAVORITES_KEY = 'embytokLocalFavorites';
+
+// Reading favorites
+const readFavorites = () => {
+  const raw = localStorage.getItem(LOCAL_FAVORITES_KEY);
+  return new Set(JSON.parse(raw || '[]'));
+}
+
+// Writing favorites
+const writeFavorites = (favorites) => {
+  localStorage.setItem(LOCAL_FAVORITES_KEY, JSON.stringify(Array.from(favorites)));
+}
+```
+
+Favorites are stored as an array of video IDs:
+```json
+[
+  "local:video1.mp4:12345:1638360000000",
+  "local:subfolder%2Fvideo2.mp4:67890:1638370000000"
+]
+```
+
+<Note>
+Local favorites are device-specific and don't sync across browsers or devices.
+</Note>
+
+## Feed Types
+
+### Latest (Default)
+
+Videos sorted by file modification date (newest first):
+
+```typescript
+const pagedRecords = visibleRecords.slice(skip, skip + limit);
+return {
+  items: pagedRecords.map(r => r.item),
+  nextStartIndex: skip + pagedRecords.length,
+  totalCount: visibleRecords.length
+}
+```
+
+### Random
+
+From `LocalClient.ts:230-237`:
+
+```typescript
+const shuffle = (records) => {
+  const next = [...records];
+  for (let i = next.length - 1; i > 0; i--) {
+    const randomIndex = Math.floor(Math.random() * (i + 1));
+    [next[i], next[randomIndex]] = [next[randomIndex], next[i]];
+  }
+  return next;
+}
+```
+
+Shuffles the entire array using Fisher-Yates algorithm.
+
+### Favorites
+
+From `LocalClient.ts:75-84`:
+
+```typescript
+const favorites = await this.getFavorites('local-library');
+const visibleRecords = this.records.filter(record => {
+  if (!matchesOrientation(record.item, orientationMode)) {
+    return false;
+  }
+  if (favorites && !favorites.has(record.item.Id)) {
+    return false;
+  }
+  return true;
+});
+```
+
+## Using One-Time Folder Upload
+
+If the File System Access API isn't available or you don't want persistent access:
+
+<Steps>
+  <Step title="Click 'Load Folder This Time Only'">
+    This opens the legacy folder picker.
+  </Step>
+  
+  <Step title="Select Your Video Folder">
+    Choose the folder containing your videos.
+  </Step>
+  
+  <Step title="Wait for Upload">
+    The browser reads all files in the folder and its subdirectories. This uses the `webkitdirectory` attribute:
+    
+    ```tsx
+    <input
+      type="file"
+      multiple
+      webkitdirectory=""
+      directory=""
+      accept="video/*"
+      onChange={handlePickLocalFolder}
+    />
+    ```
+  </Step>
+</Steps>
+
+From `Login.tsx:313-328`:
+
+```typescript
+const handlePickLocalFolder = (e) => {
+  const files = Array.from(e.target.files || []);
+  const videoFiles = files.filter(isVideoFile);
+  
+  if (videoFiles.length === 0) {
+    setError('No video files found in the selected folder.');
+    return;
+  }
+  
+  onLogin(getLocalConfig(), videoFiles);
+}
+```
+
+<Note>
+This method doesn't save the folder location. You'll need to re-select the folder each time you use EmbyTok.
+</Note>
+
+## Managing Startup Directory
+
+### Using Configured Directory
+
+If you've previously set a startup directory:
+
+<Steps>
+  <Step title="Click 'Use Configured Startup Directory'">
+    EmbyTok retrieves the handle from IndexedDB.
+  </Step>
+  
+  <Step title="Check Permissions">
+    If permission was previously granted and hasn't expired, videos load immediately.
+    
+    If permission expired, the browser prompts again.
+  </Step>
+</Steps>
+
+From `Login.tsx:287-300`:
+
+```typescript
+const handleLoadStartupFolder = async () => {
+  const handle = await getStartupDirectoryHandle();
+  if (!handle) {
+    setError('No configured startup directory found.');
+    return;
+  }
+  
+  // Check permission
+  let permission = await queryDirectoryPermission(handle);
+  if (permission !== 'granted') {
+    permission = await requestDirectoryPermission(handle);
+  }
+  
+  if (permission === 'granted') {
+    loadFromDirectoryHandle(handle, false);
+  }
+}
+```
+
+### Clearing Startup Directory
+
+To remove the saved directory:
+
+<Steps>
+  <Step title="Click 'Clear'">
+    The small button next to "Use Configured Startup Directory".
+  </Step>
+  
+  <Step title="Confirm Deletion">
+    The directory handle is removed from IndexedDB:
+    
+    ```typescript
+    await clearStartupDirectoryHandle();
+    setHasStartupFolder(false);
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Permission Denied
+
+<AccordionGroup>
+  <Accordion title="Browser prompts for permission repeatedly">
+    Some browsers reset permissions after a period of inactivity. This is a security feature. Simply re-grant permission when prompted.
+  </Accordion>
+  
+  <Accordion title="Can't access certain folders">
+    Browsers restrict access to system folders (e.g., root directory, Windows folder). Choose a user folder instead:
+    - ✅ `~/Videos`, `~/Documents`
+    - ❌ `/System`, `C:\Windows`
+  </Accordion>
+</AccordionGroup>
+
+### No Videos Found
+
+- **Check file extensions**: Only `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.m4v`, `.flv`, `.wmv`, `.ts` (>5MB), `.m2ts`, `.3gp` are supported
+- **Verify folder structure**: EmbyTok scans recursively, so videos can be in subdirectories
+- **Test with a single video**: Try a folder with just one known video file to isolate the issue
+
+### Videos Won't Play
+
+- **Check codec compatibility**: The browser must support the video codec. Use H.264 MP4 for best compatibility
+- **Try a different browser**: Some browsers have better codec support than others
+- **File corruption**: Verify the video plays in a native video player
+
+### Startup Directory Not Persisting
+
+- **IndexedDB cleared**: Check if browser is set to clear site data on exit
+- **Private browsing**: IndexedDB doesn't persist in private/incognito mode
+- **Browser storage full**: Free up space in browser storage
+
+## Privacy and Security
+
+<Note>
+**Your files never leave your device.** All video processing happens locally in your browser. EmbyTok doesn't upload anything to external servers.
+</Note>
+
+### What's Stored
+
+1. **IndexedDB**: Directory handle (pointer to folder, not file contents)
+2. **localStorage**: List of favorited video IDs
+3. **Memory**: Blob URLs for video playback (cleared on page refresh)
+
+### Permissions Model
+
+The File System Access API provides:
+- **Read-only access**: EmbyTok can't modify or delete your files
+- **User-initiated**: All access starts with user interaction (button click)
+- **Revocable**: You can revoke permissions in browser settings anytime
+
+### Revoking Access
+
+To revoke EmbyTok's access to your folders:
+
+**Chrome/Edge:**
+1. Settings → Privacy and security → Site settings
+2. View permissions and data stored across sites
+3. Find EmbyTok's domain
+4. Remove file system permissions
+
+**Or use the Clear button** in EmbyTok's local mode to remove the saved directory handle.
+
+## Next Steps
+
+- Set up [network deployment](/guides/network-deployment) to share your local EmbyTok instance with other devices
+- [Learn about video browsing features](/features/video-browsing) including orientation filters
+- [Build the Android app](/installation/android) for native mobile experience
+
+<Tip>
+For best performance with large local libraries, keep videos in a single folder with simple subdirectory structure. Deeply nested folders (10+ levels) may slow down initial scanning.
+</Tip>

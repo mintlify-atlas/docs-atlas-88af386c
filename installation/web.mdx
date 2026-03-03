@@ -1,0 +1,253 @@
+---
+title: Web Installation
+description: Install and run EmbyTok as a web application using npm, yarn, or pnpm
+---
+
+EmbyTok can be run as a Progressive Web App (PWA) in any modern browser. This guide covers installing dependencies, running the development server, and building for production.
+
+## Prerequisites
+
+Before installing EmbyTok, ensure you have:
+
+- **Node.js** v14 or higher (v20 recommended)
+- **npm**, **yarn**, or **pnpm** package manager
+- **Git** (to clone the repository)
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the EmbyTok repository to your local machine:
+
+    ```bash
+    git clone https://github.com/your-username/embytok.git
+    cd embytok
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install the required npm packages using your preferred package manager:
+
+    <CodeGroup>
+      ```bash npm
+      npm install
+      ```
+
+      ```bash yarn
+      yarn install
+      ```
+
+      ```bash pnpm
+      pnpm install
+      ```
+    </CodeGroup>
+
+    This will install all dependencies including:
+    - React 18 and React DOM
+    - Vite (build tool)
+    - TypeScript
+    - Tailwind CSS
+    - Capacitor (for mobile apps)
+    - Lucide React (icons)
+    - PWA plugin
+  </Step>
+
+  <Step title="Start the development server">
+    Launch the development server with one of these commands:
+
+    <CodeGroup>
+      ```bash Full Stack (Web + File Server)
+      npm run dev
+      ```
+
+      ```bash Web Only
+      npm run dev:web
+      ```
+
+      ```bash LAN Access (Host on 0.0.0.0)
+      npm run dev:lan
+      ```
+    </CodeGroup>
+
+    The application will be available at:
+    - **Web only**: `http://localhost:5173`
+    - **LAN access**: `http://0.0.0.0:5173` or `http://<your-ip>:5173`
+    - **Full stack**: Frontend at Vite port + API proxy to port 5176
+  </Step>
+</Steps>
+
+<Note>
+  The `npm run dev` command starts both the frontend development server and the local file server backend for testing the Folder Server mode.
+</Note>
+
+## Development Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start full stack (frontend + backend file server) |
+| `npm run dev:web` | Start frontend only (Vite dev server) |
+| `npm run dev:lan` | Start frontend with LAN access (0.0.0.0) |
+| `npm run dev:stack` | Alias for `dev` - full stack mode |
+| `npm run build` | Build production bundle |
+| `npm run preview` | Preview production build locally |
+
+## Building for Production
+
+<Steps>
+  <Step title="Build the application">
+    Compile TypeScript and bundle assets for production:
+
+    <CodeGroup>
+      ```bash npm
+      npm run build
+      ```
+
+      ```bash yarn
+      yarn build
+      ```
+
+      ```bash pnpm
+      pnpm build
+      ```
+    </CodeGroup>
+
+    This command:
+    1. Runs TypeScript compiler (`tsc`)
+    2. Builds optimized production bundle with Vite
+    3. Outputs to the `dist/` directory
+  </Step>
+
+  <Step title="Preview the production build (optional)">
+    Test the production build locally:
+
+    ```bash
+    npm run preview
+    ```
+
+    The preview server will start on port 4173 by default.
+  </Step>
+
+  <Step title="Deploy the dist folder">
+    Deploy the `dist/` folder to your web server or hosting platform:
+
+    - **Static hosting**: Netlify, Vercel, GitHub Pages, Cloudflare Pages
+    - **Traditional server**: Nginx, Apache, Caddy
+    - **With file server backend**: Use the LAN media server (see below)
+  </Step>
+</Steps>
+
+## Running with File Server Backend
+
+EmbyTok includes a built-in file server for serving local media files without Emby/Plex:
+
+<Steps>
+  <Step title="Build the frontend">
+    ```bash
+    npm run build
+    ```
+  </Step>
+
+  <Step title="Start the LAN media server">
+    Start the server with optional environment variables:
+
+    <CodeGroup>
+      ```bash Default
+      npm run lan:server
+      ```
+
+      ```bash Custom Port
+      PORT=8088 npm run lan:server
+      ```
+
+      ```bash With Media Root
+      MEDIA_ROOT=/path/to/videos PORT=8088 npm run lan:server
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Access the application">
+    Open your browser to `http://localhost:5176` (or your custom port).
+    
+    The server will display LAN access URLs in the console.
+  </Step>
+</Steps>
+
+### File Server Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `5176` | Server port |
+| `HOST` | `0.0.0.0` | Listen address (0.0.0.0 for LAN access) |
+| `SERVE_WEB` | `true` | Serve static web files |
+| `WEB_ROOT` | `dist` | Web files directory |
+| `LAN_CONFIG_FILE` | `./lan-media-config.json` | Service configuration file |
+| `MEDIA_ROOT` | - | Default media directory for initial setup |
+| `BROWSE_ROOTS` | - | Comma-separated browsable root directories |
+
+<Note>
+  The file server provides both the web UI and REST API endpoints for folder browsing and video streaming.
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="API proxy errors in development">
+    If you see errors like:
+    ```
+    http proxy error: /api/admin/...
+    connect ECONNREFUSED 127.0.0.1:5176
+    ```
+
+    **Solution**: The backend file server is not running. Use `npm run dev` (which starts both frontend and backend) instead of `npm run dev:web`.
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    If port 5173 (Vite) or 5176 (file server) is already in use:
+
+    **Solution**: Change the port using environment variables:
+    ```bash
+    PORT=8080 npm run dev:web
+    # or for file server
+    PORT=8088 npm run lan:server
+    ```
+  </Accordion>
+
+  <Accordion title="Build fails with TypeScript errors">
+    **Solution**: Ensure you're using TypeScript 5.2 or higher:
+    ```bash
+    npm install typescript@latest --save-dev
+    npm run build
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Progressive Web App (PWA)
+
+EmbyTok is configured as a PWA with offline support:
+
+- **Automatic updates**: Service worker updates automatically
+- **Install prompt**: Available on mobile browsers and desktop Chrome/Edge
+- **Offline assets**: Static files are cached for offline use
+- **Portrait mode**: Optimized for vertical video viewing
+
+To install as PWA:
+1. Open EmbyTok in Chrome/Edge/Safari
+2. Look for the install prompt in the address bar
+3. Click "Install" to add to home screen
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Deployment" icon="docker" href="/installation/docker">
+    Deploy with Docker for production environments
+  </Card>
+  <Card title="Android App" icon="android" href="/installation/android">
+    Build native Android application with Capacitor
+  </Card>
+  <Card title="iOS App" icon="apple" href="/installation/ios">
+    Create native iOS app with UIKit
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/server-setup">
+    Configure Emby/Plex servers and settings
+  </Card>
+</CardGroup>

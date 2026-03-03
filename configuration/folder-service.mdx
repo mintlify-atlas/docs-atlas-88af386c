@@ -1,0 +1,351 @@
+---
+title: 'LAN Folder Service'
+description: 'Set up the local file server for browsing videos without Emby or Plex'
+---
+
+The LAN Folder Service allows you to share videos across your local network without requiring Emby or Plex. This is perfect for simple home setups where you want to browse local video files on multiple devices.
+
+## Overview
+
+The folder service consists of:
+
+- **Node.js server** (`server/lan-media-server.mjs`) that scans directories and serves videos
+- **Admin panel** for configuring video stream services
+- **REST API** for browsing libraries and streaming videos
+- **Multi-service support** - configure multiple video folders as separate services
+
+## Environment Variables
+
+<ParamField path="HOST" type="string" default="0.0.0.0">
+  Server listening address. Use `0.0.0.0` to accept LAN connections.
+</ParamField>
+
+<ParamField path="PORT" type="number" default="5176">
+  Server port number.
+</ParamField>
+
+<ParamField path="MEDIA_ROOT" type="string" default="null">
+  Optional: Initial media directory path. If set, creates a default service on first startup.
+  
+  Example: `/Volumes/Media/Movies` or `C:\\Videos`
+</ParamField>
+
+<ParamField path="WEB_ROOT" type="string" default="dist">
+  Path to web application static files.
+</ParamField>
+
+<ParamField path="SERVE_WEB" type="boolean" default="true">
+  Whether to serve the web application. Set to `false` to disable static file hosting.
+</ParamField>
+
+<ParamField path="LAN_CONFIG_FILE" type="string" default="./lan-media-config.json">
+  Path to the configuration file that persists service definitions.
+</ParamField>
+
+<ParamField path="BROWSE_ROOTS" type="string" default="auto-detected">
+  Comma-separated list of root directories that can be browsed in the admin panel.
+  
+  - **Windows**: Auto-detects all drive letters (C:\\, D:\\, etc.)
+  - **macOS/Linux**: Defaults to `/` or uses `MEDIA_ROOT` as base
+  - **Custom**: Set explicitly like `BROWSE_ROOTS=/mnt/videos,/mnt/movies`
+</ParamField>
+
+<ParamField path="RESCAN_MS" type="number" default="15000">
+  Milliseconds between automatic directory rescans (15 seconds by default).
+</ParamField>
+
+## Starting the Server
+
+<Steps>
+  <Step title="Build the web application">
+    ```bash
+    npm run build
+    ```
+  </Step>
+
+  <Step title="Start the folder service">
+    ```bash
+    npm run lan:server
+    ```
+    
+    Or with custom configuration:
+    ```bash
+    MEDIA_ROOT=/Volumes/Media/Movies PORT=8088 npm run lan:server
+    ```
+  </Step>
+
+  <Step title="Note the LAN URLs">
+    The server will output accessible URLs:
+    ```
+    [lan-media-server] Listening: http://0.0.0.0:5176
+    [lan-media-server] LAN access URLs:
+      - http://192.168.1.50:5176
+      - http://192.168.1.100:5176
+    ```
+  </Step>
+</Steps>
+
+### Development Mode
+
+Run both frontend and backend simultaneously:
+
+```bash
+npm run dev
+```
+
+Or start them separately:
+
+```bash
+# Terminal 1 - Frontend
+npm run dev:web
+
+# Terminal 2 - Backend
+npm run lan:server
+```
+
+## Configuration File
+
+Services are persisted in `lan-media-config.json`:
+
+```json
+{
+  "currentServiceId": "ce52ca12bfb02d02",
+  "services": [
+    {
+      "id": "ce52ca12bfb02d02",
+      "name": "Family Movies",
+      "mediaRoot": "/Volumes/Media/Movies"
+    },
+    {
+      "id": "a62086a54cb47836",
+      "name": "TV Shows",
+      "mediaRoot": "/Volumes/Media/TV"
+    }
+  ]
+}
+```
+
+<ParamField path="currentServiceId" type="string">
+  ID of the currently active service. Clients default to this service when connecting.
+</ParamField>
+
+<ParamField path="services" type="array">
+  Array of service configurations.
+  
+  Each service has:
+  - `id` - Unique identifier (auto-generated SHA1 hash)
+  - `name` - Display name shown to users
+  - `mediaRoot` - Absolute path to video directory
+</ParamField>
+
+## Supported Video Formats
+
+The server automatically scans for these video extensions:
+
+```javascript
+const VIDEO_EXTENSIONS = new Set([
+  '.mp4', '.mkv', '.avi', '.mov', '.webm',
+  '.m4v', '.flv', '.wmv', '.ts', '.m2ts', '.3gp'
+]);
+```
+
+### Special Handling
+
+- **`.ts` files**: Must be at least 5MB to be recognized as video (filters out TypeScript files)
+- **Subdirectories**: Automatically grouped into virtual "libraries"
+- **File organization**: Top-level folders become library names
+
+## Directory Structure Example
+
+```
+/Volumes/Media/Movies/
+├── Action/
+│   ├── movie1.mp4
+│   └── movie2.mkv
+├── Comedy/
+│   └── movie3.mp4
+└── Documentary/
+    └── doc1.mp4
+```
+
+This creates three libraries:
+- "Action" (2 videos)
+- "Comedy" (1 video)
+- "Documentary" (1 video)
+
+## API Endpoints
+
+### Public Endpoints
+
+<ParamField path="GET /api/folder/ping" type="endpoint">
+  Health check endpoint.
+  
+  **Response:**
+  ```json
+  {
+    "ok": true,
+    "serviceCount": 2,
+    "currentServiceId": "ce52ca12bfb02d02"
+  }
+  ```
+</ParamField>
+
+<ParamField path="GET /api/folder/services" type="endpoint">
+  List all configured services.
+  
+  **Response:**
+  ```json
+  {
+    "items": [
+      { "id": "abc123", "name": "Movies", "isActive": true }
+    ],
+    "currentServiceId": "abc123"
+  }
+  ```
+</ParamField>
+
+<ParamField path="GET /api/folder/libraries" type="endpoint">
+  Get libraries for the current service.
+  
+  **Query params:**
+  - `serviceId` (optional): Override which service to query
+  
+  **Response:**
+  ```json
+  {
+    "serviceId": "abc123",
+    "serviceName": "Movies",
+    "items": [
+      { "Id": "abc:Action", "Name": "Action" },
+      { "Id": "abc:Comedy", "Name": "Comedy" }
+    ]
+  }
+  ```
+</ParamField>
+
+<ParamField path="GET /api/folder/videos" type="endpoint">
+  Fetch videos from a library.
+  
+  **Query params:**
+  - `libraryId`: Filter by library
+  - `feedType`: `latest` or `random`
+  - `skip`: Pagination offset
+  - `limit`: Number of items (default: 20)
+  - `serviceId`: Service to query
+</ParamField>
+
+<ParamField path="GET /api/folder/stream/:videoId" type="endpoint">
+  Stream a video file with Range request support.
+  
+  Supports:
+  - Full file download
+  - Partial content (HTTP 206)
+  - HEAD requests
+</ParamField>
+
+### Admin Endpoints
+
+See [Admin Panel](/configuration/admin-panel) for details on:
+- `/api/admin/config`
+- `/api/admin/browse`
+- `/api/admin/services` (POST, DELETE)
+- `/api/admin/select`
+
+## Docker Deployment
+
+Run the folder service in a container:
+
+```bash
+docker run -d --name embytok \
+  -p 5176:5176 \
+  -e MEDIA_ROOT=/media \
+  -e BROWSE_ROOTS=/media \
+  -v /path/to/videos:/media:ro \
+  -v /path/to/config:/app/data \
+  ghcr.io/your-org/embytok:main
+```
+
+### Docker Environment Variables
+
+The Dockerfile sets these defaults:
+
+```dockerfile
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=5176 \
+    SERVE_WEB=true \
+    WEB_ROOT=/app/dist \
+    LAN_CONFIG_FILE=/app/data/lan-media-config.json \
+    MEDIA_ROOT=/media \
+    BROWSE_ROOTS=/media
+```
+
+### Volume Mounts
+
+- `/app/data` - Persist configuration file
+- `/media` - Mount your video directory (read-only recommended)
+
+## Client Connection
+
+<Steps>
+  <Step title="Select Folder Service mode">
+    On the login page, click the "文件服务" (Folder Service) button.
+  </Step>
+
+  <Step title="Enter server URL">
+    Input the LAN server address:
+    ```
+    http://192.168.1.50:5176
+    ```
+  </Step>
+
+  <Step title="Choose a service">
+    Select from the dropdown list of configured services.
+  </Step>
+
+  <Step title="Connect">
+    Click connect to start browsing.
+  </Step>
+</Steps>
+
+### Default Service Loading
+
+In development mode (`localhost:5173`), the server URL defaults to `http://127.0.0.1:5176`:
+
+```typescript
+const getDevFolderServerDefaultUrl = () => {
+  const { protocol, hostname, port } = window.location;
+  if ((hostname === 'localhost' || hostname === '127.0.0.1') && port === '5173') {
+    return `${protocol}//127.0.0.1:5176`;
+  }
+  return window.location.origin;
+};
+```
+
+## Troubleshooting
+
+### "Service not found" error
+
+Ensure at least one service is configured via the admin panel.
+
+### Videos not appearing
+
+1. Check `BROWSE_ROOTS` includes your media directory
+2. Verify file extensions are supported
+3. Wait for initial scan to complete (logs show video count)
+
+### CORS errors
+
+The server automatically sets CORS headers:
+
+```javascript
+'Access-Control-Allow-Origin': '*'
+```
+
+No additional configuration needed.
+
+## Next Steps
+
+- [Configure services via the Admin Panel](/configuration/admin-panel)
+- [Set up Docker deployment](/installation/docker)
+- [Learn about playback controls](/features/playback-controls)

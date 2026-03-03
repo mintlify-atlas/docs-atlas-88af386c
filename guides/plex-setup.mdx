@@ -1,0 +1,394 @@
+---
+title: Plex Server Setup Guide
+description: Complete guide to connecting EmbyTok to your Plex media server using X-Plex-Token authentication
+---
+
+# Plex Server Setup Guide
+
+Connect EmbyTok to your Plex media server for a TikTok-style video browsing experience. This guide covers authentication, library access, and the unique aspects of Plex integration.
+
+## Prerequisites
+
+- Plex Media Server running on your network
+- Server URL and port (e.g., `http://192.168.1.10:32400`)
+- X-Plex-Token for authentication
+- Libraries containing video content
+
+<Warning>
+Plex integration requires an **X-Plex-Token** instead of username/password. See below for instructions on obtaining your token.
+</Warning>
+
+## Getting Your X-Plex-Token
+
+Plex uses token-based authentication. Here's how to find your token:
+
+<Steps>
+  <Step title="Open Plex Web">
+    Navigate to your Plex Web interface at `http://your-server:32400/web`
+  </Step>
+  
+  <Step title="Play Any Media Item">
+    Click on any movie, show, or video to open its details page
+  </Step>
+  
+  <Step title="Get Info Menu">
+    Click the three dots menu (...) and select **Get Info** or **View XML**
+  </Step>
+  
+  <Step title="Copy Token from URL">
+    In the browser address bar, you'll see a URL like:
+    ```
+    http://192.168.1.10:32400/library/metadata/12345?X-Plex-Token=xxxxxxxxxxxxxxxxxxxx
+    ```
+    
+    Copy the token value after `X-Plex-Token=`
+  </Step>
+</Steps>
+
+<Tip>
+Alternatively, check your Plex preferences at Settings → Account → Authorized Devices to find tokens for specific devices.
+</Tip>
+
+## Step 1: Configure Plex Connection
+
+<Steps>
+  <Step title="Open EmbyTok Login">
+    Navigate to your EmbyTok instance and you'll see the login screen.
+  </Step>
+  
+  <Step title="Select Plex">
+    Click the **Plex** button at the top of the login form. It should turn yellow when selected.
+  </Step>
+  
+  <Step title="Enter Server Details">
+    Fill in the following fields:
+    
+    **Server Address**:
+    ```
+    http://192.168.1.10:32400
+    ```
+    
+    **Username** (optional):
+    ```
+    Plex User
+    ```
+    This is just a display name and can be anything.
+    
+    **X-Plex-Token / Password** (required):
+    ```
+    your-plex-token-here
+    ```
+    Paste the token you obtained in the previous section.
+  </Step>
+  
+  <Step title="Click Connect">
+    Press the yellow **Connect** button to authenticate.
+  </Step>
+</Steps>
+
+## Authentication Flow
+
+Plex authentication differs from Emby. Here's what happens when you connect:
+
+### Identity Verification
+
+EmbyTok verifies your Plex server using the identity endpoint from `PlexClient.ts:37-60`:
+
+```typescript
+const response = await fetch(`${serverUrl}/identity`, {
+  headers: {
+    'Accept': 'application/json',
+    'X-Plex-Token': token
+  }
+})
+```
+
+### Response Structure
+
+Plex returns machine information:
+
+```json
+{
+  "MediaContainer": {
+    "machineIdentifier": "unique-server-id",
+    "version": "1.32.0.1234"
+  }
+}
+```
+
+EmbyTok stores this configuration from `PlexClient.ts:53-59`:
+
+```typescript
+{
+  url: serverUrl,
+  username: username || 'Plex User',
+  userId: machineIdentifier || '1',
+  token: token,
+  serverType: 'plex'
+}
+```
+
+<Note>
+The `machineIdentifier` is stored as `userId` and used for constructing playlist URIs later.
+</Note>
+
+## Step 2: Browse Libraries
+
+After authentication, EmbyTok fetches your Plex libraries.
+
+<Steps>
+  <Step title="Library Discovery">
+    EmbyTok queries the Plex API from `PlexClient.ts:62-72`:
+    
+    ```typescript
+    GET {serverUrl}/library/sections
+    Headers: { 'X-Plex-Token': token }
+    ```
+    
+    Response:
+    ```json
+    {
+      "MediaContainer": {
+        "Directory": [
+          {
+            "key": "1",
+            "title": "Movies",
+            "type": "movie"
+          },
+          {
+            "key": "2",
+            "title": "TV Shows",
+            "type": "show"
+          }
+        ]
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Select a Library">
+    Choose a library containing your videos. The library key (e.g., "1" for Movies) is used as the `parentId` for fetching videos.
+  </Step>
+</Steps>
+
+## Step 3: Video Browsing
+
+Plex video fetching works differently than Emby but provides the same browsing experience.
+
+### Fetching Videos
+
+From `PlexClient.ts:128-163`, EmbyTok requests videos using:
+
+```typescript
+GET {serverUrl}/library/sections/{libraryId}/all?
+  type=1&
+  sort=addedAt:desc&  // or 'random' for random feed
+  X-Plex-Container-Start={skip}&
+  X-Plex-Container-Size={limit}
+```
+
+**Parameters:**
+- `type=1`: Movies/videos only
+- `sort=addedAt:desc`: Latest first (or `random` for shuffle)
+- `X-Plex-Container-Start`: Pagination offset
+- `X-Plex-Container-Size`: Items per page (50 for latest, 80 for random)
+
+### Plex to EmbyItem Mapping
+
+Plex responses are transformed to EmbyTok's internal format from `PlexClient.ts:166-186`:
+
+```typescript
+const embyItem = {
+  Id: plexItem.ratingKey,
+  Name: plexItem.title,
+  Type: plexItem.type,
+  MediaType: 'Video',
+  Overview: plexItem.summary,
+  ProductionYear: plexItem.year,
+  Width: plexItem.Media[0]?.width,
+  Height: plexItem.Media[0]?.height,
+  RunTimeTicks: plexItem.duration * 10000,
+  ImageTags: {
+    Primary: plexItem.thumb ? 'true' : undefined
+  },
+  _PlexThumb: plexItem.thumb,
+  _PlexKey: plexItem.Media[0]?.Part[0]?.key
+}
+```
+
+### Orientation Filtering
+
+Same as Emby, Plex videos are filtered by aspect ratio from `PlexClient.ts:74-89`:
+
+```typescript
+if (mode === 'vertical') {
+  return height >= width * 0.8;  // 4:5 ratio or taller
+} else if (mode === 'horizontal') {
+  return width > height;
+}
+```
+
+## Video Playback
+
+Plex playback uses a fallback strategy for maximum compatibility:
+
+### Direct Play (Preferred)
+
+If the video has a direct file path, EmbyTok uses direct play from `PlexClient.ts:188-197`:
+
+```typescript
+if (plexItem._PlexKey) {
+  return `{serverUrl}{plexKey}?X-Plex-Token={token}`
+}
+```
+
+Example:
+```
+http://192.168.1.10:32400/library/parts/12345/file.mp4?X-Plex-Token=xxx
+```
+
+### Transcode Fallback (HLS)
+
+If direct play isn't available:
+
+```typescript
+return `{serverUrl}/video/:/transcode/universal/start?
+  path=${encodeURIComponent('/library/metadata/' + itemId)}&
+  mediaIndex=0&
+  partIndex=0&
+  protocol=hls&
+  offset=0&
+  fastSeek=1&
+  directPlay=0&
+  directStream=1&
+  X-Plex-Token={token}`
+```
+
+<Warning>
+HLS transcoding requires more server resources. For best performance, ensure your videos are in formats that support direct play (H.264 MP4).
+</Warning>
+
+### Image Thumbnails
+
+Thumbnails are fetched via Plex's photo transcoder from `PlexClient.ts:199-203`:
+
+```typescript
+const imageUrl = `{serverUrl}/photo/:/transcode?
+  url=${encodeURIComponent(`/library/metadata/${itemId}/thumb`)}&
+  width=800&
+  height=1200&
+  X-Plex-Token={token}`
+```
+
+## Favorites System
+
+Plex favorites use playlists named `Tok-{LibraryName}`, similar to Emby but with Plex's URI-based system.
+
+### Finding Playlists
+
+From `PlexClient.ts:207-220`:
+
+```typescript
+GET {serverUrl}/playlists?title=Tok-{libraryName}
+Headers: { 'X-Plex-Token': token }
+```
+
+### Adding to Favorites
+
+When you like a video from `PlexClient.ts:266-281`:
+
+```typescript
+// Construct Plex URI
+const itemUri = `server://{machineId}/com.plexapp.plugins.library/library/metadata/{itemId}`
+
+// If playlist exists:
+PUT {serverUrl}/playlists/{playlistId}/items?
+  uri={itemUri}&
+  X-Plex-Token={token}
+
+// If playlist doesn't exist, create it:
+POST {serverUrl}/playlists?
+  type=video&
+  title=Tok-{libraryName}&
+  smart=0&
+  uri={itemUri}&
+  X-Plex-Token={token}
+```
+
+### Removing from Favorites
+
+From `PlexClient.ts:245-263`:
+
+```typescript
+// Find the playlist item
+GET {serverUrl}/playlists/{playlistId}/items
+
+// Delete using playlistItemID
+DELETE {serverUrl}/playlists/{playlistId}/items/{playlistItemID}?
+  X-Plex-Token={token}
+```
+
+<Note>
+Plex playlists store the `playlistItemID` separately from the video's `ratingKey`. EmbyTok handles this mapping automatically.
+</Note>
+
+## Troubleshooting
+
+### Authentication Failed
+
+<AccordionGroup>
+  <Accordion title="Invalid Token">
+    - Verify your X-Plex-Token is correct
+    - Tokens can expire; generate a new one if needed
+    - Ensure no extra spaces when copying the token
+  </Accordion>
+  
+  <Accordion title="Connection Refused">
+    - Verify Plex server is running
+    - Check firewall settings allow access to port 32400
+    - Try accessing `http://server-ip:32400/web` directly
+  </Accordion>
+  
+  <Accordion title="SSL/TLS Errors">
+    - Use `http://` instead of `https://` for local connections
+    - If using Plex.tv remote access, use the secure URL provided by Plex
+  </Accordion>
+</AccordionGroup>
+
+### Videos Not Loading
+
+- **Check library permissions**: Ensure your Plex account has access to the selected library
+- **Verify video formats**: Direct play works best with H.264 MP4 files
+- **Test transcoding**: If direct play fails, EmbyTok falls back to HLS transcoding
+
+### Favorites Not Working
+
+- **Playlist permissions**: Ensure your account can create playlists
+- **Check machine identifier**: EmbyTok needs the correct `machineIdentifier` to build playlist URIs
+- **Verify playlist exists**: Look for playlists named `Tok-{LibraryName}` in Plex Web
+
+### Poor Performance
+
+- **Use direct play**: Ensure videos are in compatible formats (H.264/MP4)
+- **Reduce transcode load**: Lower quality settings if using HLS transcoding
+- **Check network speed**: Run a speed test from EmbyTok's settings menu
+
+## Plex vs Emby Differences
+
+| Feature | Plex | Emby |
+|---------|------|------|
+| **Authentication** | X-Plex-Token | Username + Password |
+| **Playback** | Direct Play or HLS | Direct Stream MP4 |
+| **Thumbnails** | Photo Transcoder | Direct Image API |
+| **Playlists** | URI-based | ID-based |
+| **Library IDs** | String keys ("1", "2") | GUID strings |
+
+## Next Steps
+
+- Learn about [local folder browsing](/guides/local-folders) for offline access
+- Set up [network deployment](/guides/network-deployment) for multi-device access
+- [Explore video browsing features](/features/video-browsing) including feed modes and orientation filters
+
+<Tip>
+For the best performance with Plex, keep your videos in H.264/MP4 format to enable direct play and avoid transcoding overhead.
+</Tip>

@@ -1,0 +1,282 @@
+---
+title: Emby Server Setup Guide
+description: Complete guide to connecting EmbyTok to your Emby or Jellyfin media server with authentication, library selection, and favorites
+---
+
+# Emby Server Setup Guide
+
+EmbyTok provides a TikTok-style vertical video browsing experience for your Emby or Jellyfin media server. This guide walks you through the complete setup process.
+
+## Prerequisites
+
+- Emby or Jellyfin server running on your network
+- Server URL and port (e.g., `http://192.168.1.100:8096`)
+- Valid user account with access to video libraries
+- Server configured to allow CORS requests from your EmbyTok instance
+
+<Note>
+EmbyTok uses the same authentication API for both Emby and Jellyfin servers. The steps in this guide apply to both platforms.
+</Note>
+
+## Step 1: Access the Login Page
+
+<Steps>
+  <Step title="Open EmbyTok">
+    Navigate to your EmbyTok instance in a web browser. You'll see the login screen with multiple server type options.
+  </Step>
+  
+  <Step title="Select Emby / Jellyfin">
+    Click the **Emby / Jellyfin** button at the top of the login form. This button should turn purple/indigo when selected.
+  </Step>
+</Steps>
+
+## Step 2: Configure Server Connection
+
+<Steps>
+  <Step title="Enter Server Address">
+    In the **Server Address** field, enter your Emby server URL:
+    
+    ```
+    http://192.168.1.100:8096
+    ```
+    
+    The URL will be automatically normalized and trailing slashes removed.
+  </Step>
+  
+  <Step title="Enter Credentials">
+    - **Username**: Your Emby username (required)
+    - **Password**: Your Emby password (optional for some setups)
+    
+    Example:
+    ```
+    Username: admin
+    Password: your-password
+    ```
+  </Step>
+  
+  <Step title="Click Connect">
+    Press the **Connect** button to authenticate with your server.
+  </Step>
+</Steps>
+
+<Warning>
+If you see a CORS error, you need to configure your Emby server to allow cross-origin requests from your EmbyTok domain. Check your Emby server's network settings.
+</Warning>
+
+## Authentication Flow
+
+EmbyTok uses the Emby authentication API to establish a secure connection. Here's what happens behind the scenes:
+
+### Authentication Request
+
+When you click Connect, EmbyTok sends a POST request to:
+
+```typescript
+POST {serverUrl}/Users/AuthenticateByName
+```
+
+With the following headers from `EmbyClient.ts:7-16`:
+
+```typescript
+const headers = {
+  'Content-Type': 'application/json',
+  'X-Emby-Authorization': `MediaBrowser Client="EmbyTok Web", Device="Web Browser", DeviceId="embytok-web-emby", Version="1.0.0"`
+}
+```
+
+And body:
+
+```json
+{
+  "Username": "your-username",
+  "Pw": "your-password"
+}
+```
+
+### Authentication Response
+
+On success, the server returns authentication data that EmbyTok stores locally:
+
+```typescript
+{
+  url: serverUrl,
+  username: data.User.Name,
+  userId: data.User.Id,
+  token: data.AccessToken,
+  serverType: 'emby'
+}
+```
+
+This configuration is saved to `localStorage` for future sessions.
+
+## Step 3: Select a Library
+
+After successful authentication, you'll see your media libraries.
+
+<Steps>
+  <Step title="View Available Libraries">
+    EmbyTok fetches all available libraries using `EmbyClient.ts:48-55`:
+    
+    ```typescript
+    GET {serverUrl}/Users/{userId}/Views
+    ```
+    
+    You'll see libraries like "Movies", "TV Shows", "Home Videos", etc.
+  </Step>
+  
+  <Step title="Choose a Library">
+    Select the library containing your vertical videos. Click on the library name to start browsing.
+  </Step>
+</Steps>
+
+<Tip>
+EmbyTok automatically filters videos based on their aspect ratio. Vertical videos (height ≥ width × 0.8) are prioritized for the best TikTok-style experience.
+</Tip>
+
+## Step 4: Browse Videos
+
+Once you've selected a library, you can browse videos in multiple modes:
+
+### Feed Types
+
+**Latest Videos** (Default)
+- Sorted by date added (newest first)
+- Fetches videos using the following parameters from `EmbyClient.ts:92-108`:
+
+```typescript
+const params = {
+  IncludeItemTypes: 'Movie,Video,Episode',
+  Recursive: 'true',
+  Fields: 'MediaSources,Width,Height,Overview,UserData',
+  SortBy: 'DateCreated',
+  SortOrder: 'Descending'
+}
+```
+
+**Random**
+- Shuffled playback for discovery
+- Uses `SortBy: 'Random'` parameter
+
+**Favorites**
+- Shows videos you've liked
+- Uses Emby playlists named `Tok-{LibraryName}` to store favorites
+
+### Video Filtering
+
+EmbyTok automatically filters videos by orientation from `EmbyClient.ts:57-72`:
+
+```typescript
+// Vertical mode: keeps videos where height >= width * 0.8
+if (mode === 'vertical') {
+  return h >= w * 0.8; // Allows slightly wide videos (4:5 ratio)
+}
+// Horizontal mode: keeps videos where width > height
+else if (mode === 'horizontal') {
+  return w > h;
+}
+```
+
+## Step 5: Using Favorites
+
+EmbyTok implements a favorites system using Emby playlists.
+
+<Steps>
+  <Step title="Like a Video">
+    Tap the heart icon while watching a video. The video is added to a playlist named `Tok-{LibraryName}`.
+  </Step>
+  
+  <Step title="View Favorites">
+    Switch to the **Favorites** feed type from the menu to see all your liked videos in reverse chronological order.
+  </Step>
+  
+  <Step title="Unlike a Video">
+    Tap the filled heart icon to remove the video from your favorites.
+  </Step>
+</Steps>
+
+### Playlist Management
+
+The favorites system from `EmbyClient.ts:143-206` works as follows:
+
+1. **Automatic Playlist Creation**: When you favorite your first video in a library, EmbyTok creates a playlist:
+   ```typescript
+   POST {serverUrl}/Playlists?Name=Tok-{libraryName}&UserId={userId}
+   ```
+
+2. **Adding Favorites**: 
+   ```typescript
+   POST {serverUrl}/Playlists/{playlistId}/Items?Ids={itemId}&UserId={userId}
+   ```
+
+3. **Removing Favorites**:
+   ```typescript
+   DELETE {serverUrl}/Playlists/{playlistId}/Items?EntryIds={playlistItemId}
+   ```
+
+<Note>
+Favorites are stored on your Emby server as playlists, so they sync across all your devices using EmbyTok.
+</Note>
+
+## Video Playback
+
+EmbyTok uses direct stream URLs for optimal performance:
+
+```typescript
+// From EmbyClient.ts:133-135
+const videoUrl = `{serverUrl}/Videos/{itemId}/stream.mp4?Static=true&api_key={token}`
+```
+
+This provides direct MP4 streaming without transcoding (when the source is MP4).
+
+### Thumbnails and Images
+
+Video thumbnails are fetched from `EmbyClient.ts:137-140`:
+
+```typescript
+const imageUrl = `{serverUrl}/Items/{itemId}/Images/Primary?maxWidth=800&tag={imageTag}&quality=90`
+```
+
+## Troubleshooting
+
+### Connection Failed
+
+<AccordionGroup>
+  <Accordion title="Check server URL format">
+    Ensure your URL includes the protocol:
+    - ✅ `http://192.168.1.100:8096`
+    - ❌ `192.168.1.100:8096`
+  </Accordion>
+  
+  <Accordion title="Verify CORS settings">
+    Add your EmbyTok domain to Emby's CORS allowed origins:
+    1. Open Emby Server Dashboard
+    2. Navigate to **Network** settings
+    3. Add your EmbyTok URL to allowed origins
+  </Accordion>
+  
+  <Accordion title="Test server accessibility">
+    Open `http://your-server:8096/Users/AuthenticateByName` in your browser. You should see a 405 Method Not Allowed error (expected for GET requests), confirming the endpoint is accessible.
+  </Accordion>
+</AccordionGroup>
+
+### No Videos Appear
+
+- **Check video dimensions**: EmbyTok filters videos by aspect ratio. In vertical mode, only videos with height ≥ width × 0.8 are shown
+- **Verify library contents**: Ensure your selected library contains videos, not just TV shows or movies without video files
+- **Check user permissions**: Verify your user account has access to the selected library
+
+### Favorites Not Saving
+
+- **Check user permissions**: Your account needs permission to create playlists
+- **Verify playlist creation**: Check your Emby server for playlists named `Tok-{LibraryName}`
+- **Clear browser storage**: Try clearing `localStorage` and re-authenticating
+
+## Next Steps
+
+- [Learn about video browsing features](/features/video-browsing) including orientation filters
+- [Set up network deployment](/guides/network-deployment) to access EmbyTok from multiple devices
+- [Explore media library management](/features/media-libraries) for organizing your content
+
+<Tip>
+For the best experience, organize your vertical videos into a dedicated library on your Emby server. This makes browsing and filtering much easier.
+</Tip>

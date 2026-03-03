@@ -1,0 +1,480 @@
+---
+title: Types
+description: TypeScript type definitions for EmbyTok client libraries
+---
+
+## Overview
+
+This page documents all TypeScript interfaces and types used across EmbyTok's client libraries.
+
+## Server Types
+
+### ServerType
+
+Defines the type of media server.
+
+```typescript
+type ServerType = 'emby' | 'plex' | 'local' | 'folder';
+```
+
+<ParamField path="emby" type="string">
+  Emby or Jellyfin media server
+</ParamField>
+
+<ParamField path="plex" type="string">
+  Plex Media Server
+</ParamField>
+
+<ParamField path="local" type="string">
+  Local browser-based file access
+</ParamField>
+
+<ParamField path="folder" type="string">
+  Folder streaming server
+</ParamField>
+
+## Configuration
+
+### ServerConfig
+
+Configuration object for connecting to a media server.
+
+```typescript
+interface ServerConfig {
+  url: string;
+  username: string;
+  token: string;
+  userId: string;
+  serverType: ServerType;
+}
+```
+
+<ResponseField name="url" type="string">
+  Base URL of the media server (e.g., 'https://emby.example.com')
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  Authenticated username
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  Authentication token or API key
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  User ID from the server (or MachineIdentifier for Plex)
+</ResponseField>
+
+<ResponseField name="serverType" type="ServerType">
+  Type of server being connected to
+</ResponseField>
+
+### Example
+
+```typescript
+const config: ServerConfig = {
+  url: 'https://emby.example.com',
+  username: 'johndoe',
+  token: 'abc123xyz',
+  userId: 'user-id-456',
+  serverType: 'emby'
+};
+```
+
+## Authentication
+
+### EmbyAuthResponse
+
+Response from Emby/Jellyfin authentication endpoint.
+
+```typescript
+interface EmbyAuthResponse {
+  User: {
+    Id: string;
+    Name: string;
+    Policy?: {
+      IsAdministrator: boolean;
+    };
+  };
+  AccessToken: string;
+  ServerId: string;
+}
+```
+
+<ResponseField name="User.Id" type="string">
+  User's unique identifier
+</ResponseField>
+
+<ResponseField name="User.Name" type="string">
+  User's display name
+</ResponseField>
+
+<ResponseField name="User.Policy.IsAdministrator" type="boolean">
+  Whether user has admin privileges (optional)
+</ResponseField>
+
+<ResponseField name="AccessToken" type="string">
+  Token for authenticated API requests
+</ResponseField>
+
+<ResponseField name="ServerId" type="string">
+  Unique server identifier
+</ResponseField>
+
+## Library Types
+
+### EmbyLibrary
+
+Represents a media library/collection.
+
+```typescript
+interface EmbyLibrary {
+  Id: string;
+  Name: string;
+  CollectionType?: string;
+}
+```
+
+<ResponseField name="Id" type="string">
+  Unique library identifier (section key for Plex)
+</ResponseField>
+
+<ResponseField name="Name" type="string">
+  Display name of the library
+</ResponseField>
+
+<ResponseField name="CollectionType" type="string">
+  Type of content (e.g., 'movies', 'tvshows', 'music')
+</ResponseField>
+
+### Example
+
+```typescript
+const library: EmbyLibrary = {
+  Id: 'lib-123',
+  Name: 'Movies',
+  CollectionType: 'movies'
+};
+```
+
+## Media Items
+
+### MediaSource
+
+Information about a video file's source.
+
+```typescript
+interface MediaSource {
+  Id: string;
+  Container: string;
+  Path: string;
+  Protocol: string;
+}
+```
+
+<ResponseField name="Id" type="string">
+  Unique identifier for this media source
+</ResponseField>
+
+<ResponseField name="Container" type="string">
+  File container format (e.g., 'mp4', 'mkv')
+</ResponseField>
+
+<ResponseField name="Path" type="string">
+  File path on the server
+</ResponseField>
+
+<ResponseField name="Protocol" type="string">
+  Streaming protocol (e.g., 'File', 'Http')
+</ResponseField>
+
+### EmbyItem
+
+Represents a video item from any media server.
+
+```typescript
+interface EmbyItem {
+  Id: string;
+  Name: string;
+  Type: string;
+  MediaType: string;
+  Overview?: string;
+  ProductionYear?: number;
+  Width?: number;
+  Height?: number;
+  RunTimeTicks?: number;
+  MediaSources?: MediaSource[];
+  ImageTags?: {
+    Primary?: string;
+    Logo?: string;
+    Thumb?: string;
+  };
+  UserData?: {
+    IsFavorite: boolean;
+    PlaybackPositionTicks: number;
+    PlayCount: number;
+  };
+}
+```
+
+<ResponseField name="Id" type="string">
+  Unique item identifier (ratingKey for Plex)
+</ResponseField>
+
+<ResponseField name="Name" type="string">
+  Title of the video
+</ResponseField>
+
+<ResponseField name="Type" type="string">
+  Item type (e.g., 'Movie', 'Episode', 'Video')
+</ResponseField>
+
+<ResponseField name="MediaType" type="string">
+  Media type (e.g., 'Video')
+</ResponseField>
+
+<ResponseField name="Overview" type="string">
+  Description or plot summary (optional)
+</ResponseField>
+
+<ResponseField name="ProductionYear" type="number">
+  Year of production (optional)
+</ResponseField>
+
+<ResponseField name="Width" type="number">
+  Video width in pixels (optional, used for orientation filtering)
+</ResponseField>
+
+<ResponseField name="Height" type="number">
+  Video height in pixels (optional, used for orientation filtering)
+</ResponseField>
+
+<ResponseField name="RunTimeTicks" type="number">
+  Duration in ticks (1 tick = 100 nanoseconds) (optional)
+</ResponseField>
+
+<ResponseField name="MediaSources" type="MediaSource[]">
+  Array of available media sources (optional)
+</ResponseField>
+
+<ResponseField name="ImageTags.Primary" type="string">
+  Tag for primary image (optional)
+</ResponseField>
+
+<ResponseField name="ImageTags.Logo" type="string">
+  Tag for logo image (optional)
+</ResponseField>
+
+<ResponseField name="ImageTags.Thumb" type="string">
+  Tag for thumbnail image (optional)
+</ResponseField>
+
+<ResponseField name="UserData.IsFavorite" type="boolean">
+  Whether user has favorited this item (optional)
+</ResponseField>
+
+<ResponseField name="UserData.PlaybackPositionTicks" type="number">
+  Last playback position in ticks (optional)
+</ResponseField>
+
+<ResponseField name="UserData.PlayCount" type="number">
+  Number of times user has played this item (optional)
+</ResponseField>
+
+### Example
+
+```typescript
+const video: EmbyItem = {
+  Id: 'video-123',
+  Name: 'Sample Video',
+  Type: 'Movie',
+  MediaType: 'Video',
+  Overview: 'An amazing video',
+  ProductionYear: 2024,
+  Width: 1080,
+  Height: 1920,
+  RunTimeTicks: 6000000000,
+  ImageTags: {
+    Primary: 'image-tag-abc'
+  },
+  UserData: {
+    IsFavorite: false,
+    PlaybackPositionTicks: 0,
+    PlayCount: 0
+  }
+};
+```
+
+## Feed Types
+
+### FeedType
+
+Defines the type of video feed to fetch.
+
+```typescript
+type FeedType = 'latest' | 'random' | 'favorites';
+```
+
+<ParamField path="latest" type="string">
+  Videos sorted by date added (newest first)
+</ParamField>
+
+<ParamField path="random" type="string">
+  Randomly shuffled videos
+</ParamField>
+
+<ParamField path="favorites" type="string">
+  User's favorited videos from playlist
+</ParamField>
+
+### OrientationMode
+
+Defines video orientation filtering mode.
+
+```typescript
+type OrientationMode = 'vertical' | 'horizontal' | 'both';
+```
+
+<ParamField path="vertical" type="string">
+  Only show vertical or near-vertical videos (height >= width * 0.8)
+</ParamField>
+
+<ParamField path="horizontal" type="string">
+  Only show horizontal videos (width > height)
+</ParamField>
+
+<ParamField path="both" type="string">
+  Show all videos regardless of orientation
+</ParamField>
+
+### Example
+
+```typescript
+// Fetch random vertical videos
+const response = await client.getVideos(
+  libraryId,
+  'Movies',
+  'random' as FeedType,
+  0,
+  15,
+  'vertical' as OrientationMode
+);
+```
+
+## Response Types
+
+### VideoResponse
+
+Response from getVideos method with pagination info.
+
+```typescript
+interface VideoResponse {
+  items: EmbyItem[];
+  nextStartIndex: number;
+  totalCount: number;
+}
+```
+
+<ResponseField name="items" type="EmbyItem[]">
+  Array of video items for the current page
+</ResponseField>
+
+<ResponseField name="nextStartIndex" type="number">
+  Starting index for the next page of results
+</ResponseField>
+
+<ResponseField name="totalCount" type="number">
+  Total number of items available (may be estimated for filtered results)
+</ResponseField>
+
+### Example
+
+```typescript
+const response: VideoResponse = await client.getVideos(
+  'lib-123',
+  'Movies',
+  'latest',
+  0,
+  15,
+  'both'
+);
+
+console.log(`Page: ${response.items.length} items`);
+console.log(`Next page starts at: ${response.nextStartIndex}`);
+console.log(`Total available: ${response.totalCount}`);
+
+if (response.nextStartIndex < response.totalCount) {
+  console.log('More items available');
+}
+```
+
+## Usage Example
+
+Combining multiple types in a real-world scenario:
+
+```typescript
+import { 
+  ServerConfig, 
+  ServerType, 
+  EmbyLibrary, 
+  EmbyItem, 
+  FeedType, 
+  OrientationMode,
+  VideoResponse 
+} from './types';
+import { ClientFactory } from './services/clientFactory';
+
+async function loadVideos() {
+  // Create server config
+  const serverType: ServerType = 'emby';
+  const config: ServerConfig = await ClientFactory.authenticate(
+    serverType,
+    'https://emby.example.com',
+    'username',
+    'password'
+  );
+
+  // Create client
+  const client = ClientFactory.create(config);
+
+  // Get libraries
+  const libraries: EmbyLibrary[] = await client.getLibraries();
+  const moviesLib = libraries.find(l => l.CollectionType === 'movies');
+
+  if (!moviesLib) return;
+
+  // Fetch videos
+  const feedType: FeedType = 'random';
+  const orientation: OrientationMode = 'vertical';
+  
+  const response: VideoResponse = await client.getVideos(
+    moviesLib.Id,
+    moviesLib.Name,
+    feedType,
+    0,
+    15,
+    orientation
+  );
+
+  // Process items
+  response.items.forEach((video: EmbyItem) => {
+    const url = client.getVideoUrl(video);
+    const thumb = client.getImageUrl(
+      video.Id,
+      video.ImageTags?.Primary,
+      'Primary'
+    );
+    
+    console.log(`${video.Name} (${video.ProductionYear})`);
+    console.log(`Dimensions: ${video.Width}x${video.Height}`);
+    console.log(`Stream: ${url}`);
+  });
+}
+```
+
+## See Also
+
+- [MediaClient](/api/media-client) - Base client class
+- [EmbyClient](/api/emby-client) - Emby implementation
+- [PlexClient](/api/plex-client) - Plex implementation
+- [FolderServerClient](/api/folder-client) - Folder server implementation

@@ -1,0 +1,441 @@
+---
+title: iOS Native App Installation
+description: Build and deploy EmbyTok as a native iOS/iPadOS application using UIKit and Xcode
+---
+
+EmbyTok includes a native iOS application built with UIKit and AVFoundation, providing native video playback with direct Emby and Folder Server integration.
+
+## Overview
+
+The iOS app (`EmbyTokNative`) is located in the `ios-native/` directory and includes:
+
+- **Native iOS/iPadOS app** with UIKit interface
+- **AVPlayer-based video playback** for smooth MP4 streaming
+- **Native watchOS app** (minimum watchOS 10.6) with disk cache
+- **Direct MP4 stream support** for Emby and Folder servers
+- **Preloading and buffering** for seamless playback
+
+<Note>
+  The iOS native app currently supports MP4 direct links. HLS and other formats can be added in future updates.
+</Note>
+
+## System Requirements
+
+<CardGroup cols={2}>
+  <Card title="Development Mac" icon="apple">
+    macOS with Xcode 15 or later
+  </Card>
+  <Card title="Target Devices" icon="mobile">
+    iOS 16+ / iPadOS 16+ devices
+  </Card>
+  <Card title="Apple ID" icon="user">
+    Free or paid Apple Developer account
+  </Card>
+  <Card title="watchOS (optional)" icon="clock">
+    watchOS 10.6+ for Apple Watch app
+  </Card>
+</CardGroup>
+
+## Installation Steps
+
+<Steps>
+  <Step title="Open Xcode project">
+    Navigate to the iOS project directory and open in Xcode:
+
+    ```bash
+    cd ios-native
+    open EmbyTokNative.xcodeproj
+    ```
+
+    Or from Finder, double-click `EmbyTokNative.xcodeproj`.
+  </Step>
+
+  <Step title="Configure code signing">
+    In Xcode:
+    1. Select the **EmbyTokNative** project in the navigator
+    2. Select the **EmbyTokNative** target
+    3. Go to **Signing & Capabilities** tab
+    4. Select your **Team** from the dropdown
+    5. Xcode will automatically manage provisioning profiles
+
+    <Warning>
+      If you see "Bundle Identifier conflicts", change the Bundle Identifier to a unique value (e.g., `com.yourname.embytok`).
+    </Warning>
+  </Step>
+
+  <Step title="Select target device">
+    In the Xcode toolbar:
+    1. Click the device selector (next to the Run button)
+    2. Choose your connected iPhone/iPad
+    3. Or select a simulator for testing
+
+    <Note>
+      For best performance testing, use a real device rather than simulator.
+    </Note>
+  </Step>
+
+  <Step title="Build and run">
+    Click the **Run** button (▶) or press `Cmd+R`.
+
+    Xcode will:
+    1. Build the application
+    2. Install on your device
+    3. Launch EmbyTok automatically
+  </Step>
+
+  <Step title="Trust developer certificate (first time)">
+    On your iOS device:
+    1. Go to **Settings > General > VPN & Device Management**
+    2. Find your developer certificate
+    3. Tap **Trust** to allow the app to run
+  </Step>
+</Steps>
+
+## Building watchOS App (Optional)
+
+The project includes a native Apple Watch companion app:
+
+<Steps>
+  <Step title="Install watchOS components">
+    If not already installed:
+    1. Open Xcode
+    2. Go to **Xcode > Settings > Components**
+    3. Download watchOS platform components
+  </Step>
+
+  <Step title="Select watch target">
+    In Xcode:
+    1. Change scheme to **EmbyTokWatch**
+    2. Select your Apple Watch as target device
+  </Step>
+
+  <Step title="Build and run">
+    Click **Run** to install on your Apple Watch.
+
+    Features:
+    - Server connection
+    - Pure mode toggle
+    - Mute control
+    - Disk cache prefetch for smooth playback
+  </Step>
+</Steps>
+
+## Network Configuration
+
+### App Transport Security
+
+The app allows HTTP connections for local servers via `NSAppTransportSecurity` settings.
+
+In `Info.plist`:
+
+```xml
+<key>NSAppTransportSecurity</key>
+<dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+</dict>
+```
+
+<Warning>
+  HTTP is allowed for development and local network access. For production apps connecting to remote servers, use HTTPS or add specific domain exceptions.
+</Warning>
+
+### Connecting to Servers
+
+EmbyTok iOS supports:
+
+1. **Emby servers** (MP4 direct stream)
+2. **Folder Server** (LAN file server mode)
+
+Ensure your iOS device can reach the server on your local network.
+
+## Using the iOS App
+
+<Steps>
+  <Step title="Launch EmbyTok">
+    Open the app on your iOS device.
+  </Step>
+
+  <Step title="Select connection type">
+    Choose between:
+    - **Emby**: Connect to Emby media server
+    - **Folder**: Connect to EmbyTok folder server
+  </Step>
+
+  <Step title="Enter server details">
+    For Emby:
+    - Server URL: `http://192.168.1.100:8096`
+    - Username and password
+
+    For Folder Server:
+    - Server URL: `http://192.168.1.100:5176`
+    - Service name or ID in password field
+  </Step>
+
+  <Step title="Start browsing">
+    Swipe vertically to browse videos in TikTok-style interface.
+  </Step>
+</Steps>
+
+## Video Playback Features
+
+The native iOS app includes:
+
+### AVPlayer Integration
+
+- Native AVFoundation video playback
+- Hardware-accelerated decoding
+- Smooth seeking and scrubbing
+- Picture-in-picture support (if enabled)
+
+### Preloading and Buffering
+
+```swift
+// Example configuration
+AVPlayerItem.preferredForwardBufferDuration = 10.0
+```
+
+- Preloads next 2 videos for seamless browsing
+- Configurable buffer duration
+- Efficient memory management
+
+### Cache Management (watchOS)
+
+watchOS app includes disk cache:
+
+- Location: `Caches/EmbyTokWatchCache`
+- Prefetches current and next videos
+- Automatic cache cleanup
+
+## Xcode Project Structure
+
+```
+ios-native/
+├── EmbyTokNative.xcodeproj/     # Xcode project
+├── EmbyTokNative/               # iOS app source
+│   ├── ContentView.swift        # Main UI
+│   ├── VideoPlayer.swift        # AVPlayer wrapper
+│   ├── Models/                  # Data models
+│   └── Info.plist              # App configuration
+├── EmbyTokWatch/                # watchOS app (optional)
+└── README.md                    # iOS-specific docs
+```
+
+## Development Workflow
+
+### Making Code Changes
+
+<Steps>
+  <Step title="Edit Swift files">
+    Modify source files in Xcode editor.
+  </Step>
+
+  <Step title="Build the project">
+    Press `Cmd+B` to build without running.
+  </Step>
+
+  <Step title="Run on device">
+    Press `Cmd+R` to build and run on selected device/simulator.
+  </Step>
+</Steps>
+
+### Debugging
+
+- **Console**: View `print()` and `NSLog()` output in Xcode console
+- **Breakpoints**: Click line numbers to add breakpoints
+- **View hierarchy**: Use Debug View Hierarchy tool
+- **Network**: Use Network Link Conditioner for testing slow connections
+
+### Testing on Simulator
+
+Run in iOS Simulator for quick testing:
+
+1. Select simulator from device menu
+2. Click Run
+3. Simulator launches automatically
+
+<Note>
+  Simulators are useful for UI testing, but use real devices for accurate video playback performance testing.
+</Note>
+
+## Building for Distribution
+
+### Archive for TestFlight/App Store
+
+<Steps>
+  <Step title="Select Generic iOS Device">
+    In device selector, choose **Any iOS Device (arm64)**.
+  </Step>
+
+  <Step title="Create archive">
+    Select **Product > Archive** from menu.
+
+    Wait for build to complete.
+  </Step>
+
+  <Step title="Distribute archive">
+    In Organizer window:
+    1. Select your archive
+    2. Click **Distribute App**
+    3. Choose distribution method:
+       - **TestFlight & App Store** for beta/release
+       - **Ad Hoc** for limited device distribution
+       - **Enterprise** for internal apps
+    4. Follow prompts to upload or export
+  </Step>
+</Steps>
+
+### Export IPA File
+
+For manual distribution:
+
+1. Archive the project (steps above)
+2. Select **Export** instead of upload
+3. Choose **Development** or **Ad Hoc**
+4. Select signing certificate
+5. Export IPA file
+
+Install IPA using:
+- Xcode: **Window > Devices and Simulators**
+- Third-party tools like Apple Configurator
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Code signing failed">
+    **Solutions**:
+    1. Verify you're signed in to Xcode with your Apple ID:
+       - **Xcode > Settings > Accounts**
+    2. Change Bundle Identifier to unique value
+    3. Select correct team in Signing & Capabilities
+    4. For free accounts, use automatic signing for development
+  </Accordion>
+
+  <Accordion title="Device not appearing in device list">
+    **Solutions**:
+    1. Unlock your iOS device
+    2. Trust the computer when prompted
+    3. Reconnect USB cable
+    4. Open **Window > Devices and Simulators** to troubleshoot
+  </Accordion>
+
+  <Accordion title="App crashes on launch">
+    **Debugging steps**:
+    1. Check Xcode console for crash logs
+    2. Verify server URL is reachable from device
+    3. Check Info.plist for correct permissions
+    4. Ensure iOS version meets minimum requirement (iOS 16+)
+  </Accordion>
+
+  <Accordion title="Videos won't play">
+    **Check**:
+    1. Network connectivity between device and server
+    2. Server is serving MP4 files (not transcoding to HLS)
+    3. HTTP access is allowed (check App Transport Security)
+    4. Test server URL in Safari on device first
+
+    **Solution**: Verify with test URL:
+    ```swift
+    // Test in Safari
+    http://your-server:5176/api/folder/ping
+    ```
+  </Accordion>
+
+  <Accordion title="watchOS app won't build">
+    **Solutions**:
+    1. Install watchOS platform: **Xcode > Settings > Components**
+    2. Ensure Apple Watch is paired with iPhone
+    3. Update watchOS to 10.6 or later
+    4. Check signing for both iOS and watchOS targets
+  </Accordion>
+
+  <Accordion title="HTTP connections blocked">
+    **Solution**: Update `Info.plist` to allow your server domain:
+    ```xml
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>your-server.local</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+            </dict>
+        </dict>
+    </dict>
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Optimization
+
+### Video Preloading
+
+The app preloads upcoming videos:
+
+```swift
+// Preload configuration
+let preloadCount = 2  // Number of videos to preload
+let bufferDuration = 10.0  // Seconds of buffer
+```
+
+Adjust these values in the source code for your use case.
+
+### Memory Management
+
+- Automatic cleanup of unused AVPlayerItem instances
+- Cache limits for watchOS app
+- Efficient thumbnail loading
+
+### Network Optimization
+
+- Range request support for seeking
+- HEAD request optimization
+- Persistent connections
+
+## Publishing to App Store
+
+To submit EmbyTok to the App Store:
+
+<Steps>
+  <Step title="Enroll in Apple Developer Program">
+    Required for App Store distribution ($99/year).
+  </Step>
+
+  <Step title="Create App Store listing">
+    In [App Store Connect](https://appstoreconnect.apple.com):
+    1. Create new app
+    2. Fill in app information
+    3. Add screenshots and descriptions
+    4. Set pricing and availability
+  </Step>
+
+  <Step title="Archive and upload">
+    Follow "Building for Distribution" steps above to upload build.
+  </Step>
+
+  <Step title="Submit for review">
+    Complete all required information and submit for Apple review.
+  </Step>
+</Steps>
+
+<Warning>
+  Ensure your app complies with [App Store Review Guidelines](https://developer.apple.com/app-store/review/guidelines/), especially regarding content and server connections.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Android App" icon="android" href="/installation/android">
+    Build Android version with Capacitor
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/server-setup">
+    Configure Emby/Folder servers
+  </Card>
+  <Card title="iOS Development" icon="code" href="/installation/ios">
+    Extend iOS app features
+  </Card>
+  <Card title="Folder Server" icon="server" href="/features/folder-server">
+    Set up folder server for iOS app
+  </Card>
+</CardGroup>

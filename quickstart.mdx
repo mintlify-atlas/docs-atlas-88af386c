@@ -1,80 +1,439 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get from zero to watching videos in under 5 minutes
 ---
 
-## Get started in three steps
+# Quickstart Guide
 
-Get your documentation site running locally and make your first customization.
+This guide will get you watching your media collection in EmbyTok within minutes, whether you're connecting to an Emby server, running locally, or deploying with Docker.
 
-### Step 1: Set up your local environment
+## Choose Your Path
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+<CardGroup cols={3}>
+  <Card title="Emby/Jellyfin" icon="video">
+    Connect to your existing media server
+  </Card>
+  
+  <Card title="Local Folder" icon="folder">
+    Browse videos from your device
+  </Card>
+  
+  <Card title="Docker/NAS" icon="docker">
+    Self-host on your network
+  </Card>
 </CardGroup>
 
+## Option 1: Connect to Emby/Jellyfin
+
+<Steps>
+  <Step title="Access EmbyTok">
+    Open EmbyTok in your browser. If you don't have it running yet, see the installation section below.
+  </Step>
+  
+  <Step title="Select Server Type">
+    On the login screen, select **Emby / Jellyfin** from the server type selector.
+  </Step>
+  
+  <Step title="Enter Server Details">
+    Fill in your server information:
+    
+    - **Server Address**: Your Emby/Jellyfin URL (e.g., `http://192.168.1.100:8096`)
+    - **Username**: Your Emby/Jellyfin username
+    - **Password**: Your password (optional for some servers)
+    
+    <Note>
+    The app automatically normalizes URLs. You can enter `192.168.1.100:8096` and it will add `http://` for you.
+    </Note>
+  </Step>
+  
+  <Step title="Connect & Browse">
+    Click **Connect**. Once authenticated, you'll see your video feed!
+    
+    - **Swipe up/down** to navigate between videos
+    - **Tap** to play/pause
+    - **Swipe left/right** to seek through the video
+    - Tap the **grid icon** to switch to grid view
+  </Step>
+</Steps>
+
+### Authentication Implementation
+
+EmbyTok uses the Emby REST API for authentication:
+
+```typescript services/EmbyClient.ts
+async authenticate(username: string, password: string): Promise<ServerConfig> {
+  const cleanUrl = this.getCleanUrl();
+  const response = await fetch(`${cleanUrl}/Users/AuthenticateByName`, {
+    method: 'POST',
+    headers: this.getHeaders(),
+    body: JSON.stringify({
+      Username: username,
+      Pw: password,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Emby Authentication failed');
+  }
+
+  const data = await response.json();
+  return {
+    url: this.config.url,
+    username: data.User.Name,
+    userId: data.User.Id,
+    token: data.AccessToken,
+    serverType: 'emby'
+  };
+}
+```
+
+## Option 2: Connect to Plex
+
+<Steps>
+  <Step title="Get Your X-Plex-Token">
+    You'll need your Plex authentication token. Find it by:
+    
+    1. Open a media item in Plex Web
+    2. Click **...** > **Get Info** > **View XML**
+    3. Look for `X-Plex-Token` in the URL
+    
+    <Warning>
+    Keep your X-Plex-Token secure! It provides full access to your Plex server.
+    </Warning>
+  </Step>
+  
+  <Step title="Select Plex Server Type">
+    On the login screen, click the **Plex** button.
+  </Step>
+  
+  <Step title="Enter Connection Details">
+    - **Server Address**: Your Plex server URL (e.g., `http://192.168.1.10:32400`)
+    - **Username**: Optional (defaults to "User")
+    - **X-Plex-Token / Password**: Paste your X-Plex-Token here
+  </Step>
+  
+  <Step title="Connect">
+    Click **Connect** to access your Plex library.
+  </Step>
+</Steps>
+
+## Option 3: Browse Local Folders
+
+Perfect for watching videos on your device without a server.
+
+<Steps>
+  <Step title="Select Local Mode">
+    On the login screen, click the **本地** (Local) button.
+  </Step>
+  
+  <Step title="Choose Folder Selection Method">
+    You have two options:
+    
+    **Option A: Set as Startup Folder** (Recommended)
+    - Click **选择并设为启动目录** (Select and set as startup directory)
+    - Choose your video folder
+    - EmbyTok will remember this folder and auto-load it next time
+    
+    **Option B: One-Time Load**
+    - Click **仅本次加载文件夹** (Load folder for this session only)
+    - Choose your video folder
+    - This won't be saved for future sessions
+  </Step>
+  
+  <Step title="Grant Permissions">
+    Your browser will ask for permission to access the folder. Click **Allow**.
+    
+    <Note>
+    EmbyTok uses the File System Access API, which is supported in modern browsers like Chrome, Edge, and Opera. Safari users should use the one-time load option.
+    </Note>
+  </Step>
+  
+  <Step title="Start Watching">
+    EmbyTok will scan your folder (including subfolders) for video files and start playing!
+  </Step>
+</Steps>
+
+### Supported Video Formats
+
+EmbyTok recognizes these video extensions:
+
+```typescript components/Login.tsx
+const LOCAL_VIDEO_EXTENSIONS = new Set([
+  'mp4', 'mkv', 'avi', 'mov', 'webm', 'm4v',
+  'flv', 'wmv', 'ts', 'm2ts', '3gp'
+]);
+
+const isVideoFile = (file: File) => {
+  if (file.type.startsWith('video/')) {
+    // Filter out TypeScript files accidentally matched as .ts videos
+    if (file.name.toLowerCase().endsWith('.ts') && 
+        file.size < TS_VIDEO_MIN_BYTES) {
+      return false;
+    }
+    return true;
+  }
+  const ext = file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase();
+  return LOCAL_VIDEO_EXTENSIONS.has(ext);
+};
+```
+
+## Option 4: LAN File Server (Docker/NAS)
+
+Ideal for sharing videos across devices on your local network.
+
+### Quick Docker Setup
+
+<Steps>
+  <Step title="Prepare Your Media Directory">
+    Create a folder for your videos:
+    
+    ```bash
+    mkdir -p ./media
+    # Add your video files to ./media
+    ```
+  </Step>
+  
+  <Step title="Start with Docker Compose">
+    ```bash
+    git clone <repository-url>
+    cd embytok
+    docker compose up -d --build
+    ```
+    
+    This will:
+    - Build the EmbyTok image
+    - Start the web server on port 5176
+    - Mount your `./media` folder
+  </Step>
+  
+  <Step title="Access Admin Panel">
+    Open `http://<your-ip>:5176/admin` in your browser.
+    
+    - **Admin Password**: `admin`
+    
+    <Warning>
+    Change the admin password in production by modifying the server code!
+    </Warning>
+  </Step>
+  
+  <Step title="Configure Video Service">
+    In the admin panel:
+    
+    1. Browse to your video folder (will show `/media` inside the container)
+    2. Enter a **Service Name** (e.g., "My Movies")
+    3. Click **Save** and **Set as Current**
+  </Step>
+  
+  <Step title="Connect from Other Devices">
+    On any device on your network:
+    
+    1. Open `http://<server-ip>:5176`
+    2. Select **文件服务** (File Service)
+    3. Enter server address: `http://<server-ip>:5176`
+    4. Select your service name from the dropdown
+    5. Click **Connect**
+  </Step>
+</Steps>
+
+### Docker Environment Variables
+
+```bash
+# Server Configuration
+PORT=5176                                    # Server port
+HOST=0.0.0.0                                 # Listen address
+SERVE_WEB=true                               # Serve web interface
+
+# Paths
+WEB_ROOT=/app/dist                           # Web files location
+LAN_CONFIG_FILE=/app/data/lan-media-config.json  # Service config
+MEDIA_ROOT=/media                            # Media directory
+BROWSE_ROOTS=/media                          # Browsable directories
+```
+
+### Alternative: Docker Run Command
+
+```bash
+docker run -d --name embytok --restart unless-stopped \
+  -p 5176:5176 \
+  -e HOST=0.0.0.0 -e PORT=5176 -e SERVE_WEB=true \
+  -e WEB_ROOT=/app/dist \
+  -e LAN_CONFIG_FILE=/app/data/lan-media-config.json \
+  -e MEDIA_ROOT=/media -e BROWSE_ROOTS=/media \
+  -v ./lan-media-config.json:/app/data/lan-media-config.json \
+  -v ./media:/media:ro \
+  embytok:latest
+```
+
+## Development Setup
+
+Want to modify EmbyTok or run it from source?
+
+<Steps>
+  <Step title="Clone the Repository">
+    ```bash
+    git clone <repository-url>
+    cd embytok
+    ```
+  </Step>
+  
+  <Step title="Install Dependencies">
+    ```bash
+    npm install
+    ```
+    
+    <Note>
+    Requires Node.js v14 or higher.
+    </Note>
+  </Step>
+  
+  <Step title="Start Development Server">
+    **Web Only:**
+    ```bash
+    npm run dev:web
+    ```
+    
+    **Web + LAN File Server:**
+    ```bash
+    npm run dev
+    ```
+    
+    This starts:
+    - Vite dev server on port 5173
+    - LAN file server on port 5176 (if using full dev mode)
+  </Step>
+  
+  <Step title="Build for Production">
+    ```bash
+    npm run build
+    ```
+    
+    Output will be in the `dist/` directory.
+  </Step>
+</Steps>
+
+### Development Script
+
+The `dev-with-lan.mjs` script starts both servers concurrently:
+
+```javascript scripts/dev-with-lan.mjs
+import { spawn } from 'child_process';
+
+const viteProcess = spawn('npm', ['run', 'dev:web'], { 
+  stdio: 'inherit', 
+  shell: true 
+});
+
+const lanProcess = spawn('npm', ['run', 'lan:server'], { 
+  stdio: 'inherit', 
+  shell: true 
+});
+
+process.on('SIGINT', () => {
+  viteProcess.kill();
+  lanProcess.kill();
+  process.exit();
+});
+```
+
+## Video Feed Navigation
+
+Once connected, here's how to navigate:
+
+### Gestures & Controls
+
+- **Swipe Up**: Next video
+- **Swipe Down**: Previous video
+- **Tap Video**: Play/Pause
+- **Swipe Left/Right**: Seek backward/forward
+- **Grid Icon**: Switch to grid view
+- **Heart Icon**: Like/Unlike video (adds to favorites)
+- **Volume Icon**: Mute/Unmute
+- **Fullscreen Icon**: Enter/Exit fullscreen
+
+### Browse Modes
+
+Switch between modes in the top navigation:
+
+- **收藏** (Favorites): Your liked videos
+- **随机** (Random): Randomized discovery
+- **最新** (Latest): Newest videos first
+
+### Orientation Filter
+
+In the menu (hamburger icon):
+
+- **Vertical**: Show only portrait videos (aspect ratio ≥ 0.8)
+- **Horizontal**: Show only landscape videos
+- **Both**: Show all videos
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Libraries" icon="library" href="/features/media-libraries">
+    Manage which libraries appear in EmbyTok
+  </Card>
+  
+  <Card title="Deploy to NAS" icon="server" href="/guides/network-deployment">
+    Complete guide for NAS deployment (Synology, etc.)
+  </Card>
+  
+  <Card title="Build Android App" icon="android" href="/installation/android">
+    Package EmbyTok as a native Android app
+  </Card>
+  
+  <Card title="iOS Native App" icon="apple" href="/installation/ios">
+    Build the UIKit-based iOS app with AVFoundation
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection Failed - CORS Error">
+    If you see CORS errors in the browser console:
+    
+    1. **Emby/Jellyfin**: Enable CORS in your server settings
+    2. **Plex**: Use a reverse proxy like Nginx to add CORS headers
+    3. **Docker**: Ensure you're accessing via IP, not localhost (unless on same machine)
+  </Accordion>
+  
+  <Accordion title="No Videos Showing (File Server)">
+    Make sure you:
+    
+    1. Created a service in the admin panel (`/admin`)
+    2. Set the service as current
+    3. Selected the correct service name on the login screen
+    4. Verify API returns data: `http://<ip>:5176/api/folder/videos?feedType=latest&serviceId=<id>`
+  </Accordion>
+  
+  <Accordion title="Videos Won't Play">
+    **Browser Compatibility:**
+    - EmbyTok requires a modern browser with HTML5 video support
+    - Safari may have limited codec support
+    
+    **Server Issues:**
+    - Check that video URLs are accessible (open in new tab)
+    - Verify transcoding settings in Emby/Plex if direct play fails
+    - For file server mode, ensure videos are MP4 format
+  </Accordion>
+  
+  <Accordion title="Docker: exec format error">
+    This means architecture mismatch:
+    
+    ```bash
+    # On Mac with ARM, build for AMD64 (most NAS devices)
+    docker buildx build --platform linux/amd64 -t embytok:amd64 --load .
+    docker save -o embytok_amd64.tar embytok:amd64
+    ```
+    
+    Transfer the `.tar` file to your NAS and load it:
+    
+    ```bash
+    docker load -i embytok_amd64.tar
+    ```
+  </Accordion>
+</AccordionGroup>
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+Having issues? Check the [GitHub repository](https://github.com/your-repo/embytok) for more troubleshooting tips and community support.
 </Note>

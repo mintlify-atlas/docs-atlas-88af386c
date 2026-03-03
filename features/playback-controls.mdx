@@ -1,0 +1,197 @@
+---
+title: Playback Controls
+description: Master video playback with touch gestures, seek controls, audio management, and fullscreen viewing
+---
+
+EmbyTok provides intuitive playback controls designed for touch-first interaction. Control your viewing experience with gestures, on-screen controls, and keyboard shortcuts.
+
+## Basic Playback
+
+### Play/Pause
+
+<Tabs>
+  <Tab title="Touch">
+    **Tap anywhere** on the video to toggle between play and pause.
+  </Tab>
+  <Tab title="Button">
+    Use the **play/pause button** in the bottom-left corner of the progress bar.
+  </Tab>
+  <Tab title="Keyboard">
+    Press **Space** or **Enter** to play/pause.
+  </Tab>
+</Tabs>
+
+Videos automatically begin playing when they scroll into view and pause when you navigate away.
+
+## Audio Controls
+
+### Mute/Unmute
+
+**Toggle Audio:**
+- Tap the **volume icon** in the top-right corner
+- Press **M** on keyboard
+- Audio state persists across videos
+
+**Volume Indicator:**
+- **Red X icon:** Audio is muted
+- **White speaker icon:** Audio is playing
+
+**Spinning Disc Indicator:**
+
+The spinning disc at the bottom-right of each video shows playback status:
+- Spinning: Video is playing
+- Red border: Audio is muted
+- Gray border: Audio is enabled
+
+<Info>
+  EmbyTok starts with audio muted by default for a better browsing experience. Unmute when you find a video you want to watch with sound.
+</Info>
+
+## Video Seeking & Progress
+
+### Progress Bar
+
+A seek bar appears at the bottom of each video showing:
+- Current playback position
+- Total video duration
+- Visual timeline of progress
+
+**To seek:**
+1. Tap and drag the progress slider left/right
+2. Video playback jumps to your selected position
+3. Release to continue playback
+
+### Swipe to Seek
+
+Use horizontal swipe gestures for quick seeking:
+
+1. **Swipe right** on the video → Fast forward
+2. **Swipe left** on the video → Rewind
+3. A preview overlay shows your seek offset (e.g., "+15s" or "-10s")
+4. Release to apply the seek
+
+<Tip>
+  The further you swipe, the larger the seek offset. Each 5 pixels of swipe equals approximately 1 second of seek time.
+</Tip>
+
+### Keyboard Seeking
+
+- **Right Arrow:** Skip forward 10 seconds
+- **Left Arrow:** Skip backward 10 seconds
+
+## Speed Controls
+
+### 2x Playback Speed
+
+Hold your finger down on the video for **long press** (500ms+) to activate 2x playback speed:
+
+1. Touch and hold anywhere on the video
+2. After 0.5 seconds, a "2x Speed" indicator appears
+3. Video plays at double speed while you hold
+4. Release to return to normal speed
+
+<Note>
+  This is perfect for quickly scrubbing through videos to find interesting moments without manually seeking.
+</Note>
+
+## Fullscreen Mode
+
+### Entering Fullscreen
+
+**Methods:**
+- Tap the **fullscreen icon** (maximize) in the top-right corner
+- On supported devices, fullscreen gives you immersive viewing
+
+**Exit Fullscreen:**
+- Tap the **minimize icon** (replaces maximize when in fullscreen)
+- Press **Esc** on keyboard
+- Use your browser's fullscreen exit gesture
+
+<Accordion title="Device-Specific Fullscreen Behavior">
+  **Mobile Devices:**
+  - Fullscreen hides browser UI completely
+  - May require screen rotation for best experience
+  - Some mobile browsers handle fullscreen differently
+  
+  **Desktop:**
+  - Standard browser fullscreen (F11-like)
+  - All browser chrome hidden
+  - Press Esc to exit
+  
+  **Tablets:**
+  - Works like mobile in portrait mode
+  - Like desktop in landscape mode
+</Accordion>
+
+## Video Information
+
+### Viewing Details
+
+Each video displays information at the bottom of the screen:
+
+- **Video title**
+- **Production year** (if available)
+- **Duration** in minutes
+- **Media type** badge
+- **Description/Overview** (tap "Info" to expand)
+
+**Expand Full Description:**
+1. Tap the **Info icon** (ℹ️) on the right sidebar
+2. The description area expands to show full details
+3. Tap again to collapse
+
+<Info>
+  You can also tap directly on the truncated description text to expand it without using the Info button.
+</Info>
+
+## Video Rotation
+
+For videos with incorrect orientation, use the rotation control:
+
+1. Tap the **rotation icon** (↻) on the right sidebar
+2. Video rotates 90° clockwise
+3. Tap again to continue rotating (0°, 90°, 180°, 270°)
+4. Rotation resets when you navigate to a different video
+
+This is useful for:
+- Phone-recorded videos in wrong orientation
+- Sideways content
+- Adjusting vertical videos on horizontal screens
+
+## Keyboard Shortcuts Reference
+
+<CardGroup cols={2}>
+  <Card title="Space / Enter" icon="play">
+    Play/Pause video
+  </Card>
+  <Card title="M" icon="volume">
+    Toggle mute/unmute
+  </Card>
+  <Card title="F" icon="heart">
+    Toggle favorite status
+  </Card>
+  <Card title="←" icon="backward">
+    Skip back 10 seconds
+  </Card>
+  <Card title="→" icon="forward">
+    Skip forward 10 seconds
+  </Card>
+  <Card title="Esc" icon="minimize">
+    Exit fullscreen
+  </Card>
+</CardGroup>
+
+## Touch Gesture Summary
+
+| Gesture | Action |
+|---------|--------|
+| **Single Tap** | Play/Pause |
+| **Swipe Up** | Next video |
+| **Swipe Down** | Previous video |
+| **Swipe Left/Right** | Seek backward/forward |
+| **Long Press** | 2x playback speed |
+| **Drag Progress Bar** | Manual seek |
+
+<Warning>
+  Some gestures (like swipe to seek) won't trigger if you swipe too vertically. Keep your swipe mostly horizontal for seeking, or mostly vertical for video navigation.
+</Warning>

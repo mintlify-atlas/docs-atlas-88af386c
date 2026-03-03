@@ -1,0 +1,383 @@
+---
+title: PlexClient
+description: Client implementation for Plex Media Server
+---
+
+## Overview
+
+`PlexClient` extends [MediaClient](/api/media-client) to provide integration with Plex Media Server. It supports library browsing, video streaming (direct play and transcoding), and playlist-based favorites.
+
+## Constructor
+
+```typescript
+import { PlexClient } from './services/PlexClient';
+
+const client = new PlexClient(config);
+```
+
+<ParamField path="config" type="ServerConfig" required>
+  Server configuration with Plex server details
+</ParamField>
+
+## Authentication
+
+### authenticate
+
+Authenticates with a Plex server using an X-Plex-Token.
+
+```typescript
+authenticate(username: string, password: string): Promise<ServerConfig>
+```
+
+<ParamField path="username" type="string" required>
+  Username (can be any value, used for display)
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  X-Plex-Token from Plex account settings
+</ParamField>
+
+<ResponseField name="url" type="string">
+  Server URL
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  Username or 'Plex User' if not provided
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  Server's MachineIdentifier (used for playlist URIs)
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  X-Plex-Token for API requests
+</ResponseField>
+
+<ResponseField name="serverType" type="'plex'">
+  Always returns 'plex'
+</ResponseField>
+
+### Example
+
+```typescript
+const config: ServerConfig = {
+  url: 'https://plex.example.com:32400',
+  username: '',
+  token: '',
+  userId: '',
+  serverType: 'plex'
+};
+
+const client = new PlexClient(config);
+const authConfig = await client.authenticate(
+  'MyPlexUser',
+  'YOUR_X_PLEX_TOKEN'
+);
+
+console.log(authConfig.userId); // MachineIdentifier
+```
+
+<Note>
+  To get your X-Plex-Token, visit your Plex account settings or check the Plex documentation.
+</Note>
+
+## Library Management
+
+### getLibraries
+
+Fetches all library sections from the Plex server.
+
+```typescript
+getLibraries(): Promise<EmbyLibrary[]>
+```
+
+<ResponseField name="return" type="Promise<EmbyLibrary[]>">
+  Array of library objects with Id (section key), Name (title), and CollectionType (type)
+</ResponseField>
+
+### Example
+
+```typescript
+const libraries = await client.getLibraries();
+
+libraries.forEach(lib => {
+  console.log(`${lib.Name} - Type: ${lib.CollectionType}`);
+});
+```
+
+## Video Retrieval
+
+### getVideos
+
+Fetches videos from a Plex library with filtering and pagination.
+
+```typescript
+getVideos(
+  parentId: string | undefined,
+  libraryName: string,
+  feedType: FeedType,
+  skip: number,
+  limit: number,
+  orientationMode: OrientationMode
+): Promise<VideoResponse>
+```
+
+<ParamField path="parentId" type="string | undefined" required>
+  Library section key (required for standard feeds, undefined for favorites)
+</ParamField>
+
+<ParamField path="libraryName" type="string" required>
+  Name of the library for playlist lookups
+</ParamField>
+
+<ParamField path="feedType" type="FeedType" required>
+  - `'latest'`: Sorted by addedAt descending
+  - `'random'`: Random shuffle
+  - `'favorites'`: Items from Tok playlist
+</ParamField>
+
+<ParamField path="skip" type="number" required>
+  Starting index for pagination
+</ParamField>
+
+<ParamField path="limit" type="number" required>
+  Not directly used (batch size: 50 for latest, 80 for random)
+</ParamField>
+
+<ParamField path="orientationMode" type="OrientationMode" required>
+  - `'vertical'`: Only videos with height >= width * 0.8
+  - `'horizontal'`: Only videos with width > height
+  - `'both'`: No filtering
+</ParamField>
+
+<ResponseField name="items" type="EmbyItem[]">
+  Array of video items mapped from Plex format
+</ResponseField>
+
+<ResponseField name="nextStartIndex" type="number">
+  Index for the next page
+</ResponseField>
+
+<ResponseField name="totalCount" type="number">
+  Total number of items in the library
+</ResponseField>
+
+### Example
+
+```typescript
+const response = await client.getVideos(
+  '1', // Library section key
+  'Movies',
+  'random',
+  0,
+  15,
+  'horizontal'
+);
+
+console.log(`Found ${response.totalCount} total videos`);
+response.items.forEach(video => {
+  console.log(`${video.Name} (${video.ProductionYear})`);
+});
+```
+
+## Media URLs
+
+### getVideoUrl
+
+Generates streaming URL for a video with fallback to transcoding.
+
+```typescript
+getVideoUrl(item: EmbyItem): string
+```
+
+<ParamField path="item" type="EmbyItem" required>
+  Video item (with Plex-specific `_PlexKey` field for direct play)
+</ParamField>
+
+<ResponseField name="return" type="string">
+  Direct play URL if available, otherwise HLS transcode URL
+</ResponseField>
+
+### getImageUrl
+
+Generates URL for video thumbnail using Plex's photo transcoder.
+
+```typescript
+getImageUrl(
+  itemId: string,
+  tag?: string,
+  type?: 'Primary' | 'Backdrop'
+): string
+```
+
+<ParamField path="itemId" type="string" required>
+  Plex ratingKey
+</ParamField>
+
+<ParamField path="tag" type="string">
+  Not used for Plex (included for interface compatibility)
+</ParamField>
+
+<ParamField path="type" type="'Primary' | 'Backdrop'">
+  Not used for Plex (always fetches thumb)
+</ParamField>
+
+<ResponseField name="return" type="string">
+  Transcoded thumbnail URL at 800x1200
+</ResponseField>
+
+### Example
+
+```typescript
+const videoUrl = client.getVideoUrl(video);
+const thumbnailUrl = client.getImageUrl(video.Id);
+
+// Video URL will be direct play if available:
+// https://plex.example.com/library/parts/12345/file.mp4?X-Plex-Token=...
+// Or HLS transcode:
+// https://plex.example.com/video/:/transcode/universal/start?...
+```
+
+## Favorites Management
+
+PlexClient uses playlists named `Tok-{LibraryName}` to store favorites.
+
+### getFavorites
+
+Retrieves all favorited item IDs for a library.
+
+```typescript
+getFavorites(libraryName: string): Promise<Set<string>>
+```
+
+<ParamField path="libraryName" type="string" required>
+  Name of the library
+</ParamField>
+
+<ResponseField name="return" type="Promise<Set<string>>">
+  Set of ratingKeys in the Tok playlist (empty set if playlist doesn't exist)
+</ResponseField>
+
+### toggleFavorite
+
+Adds or removes an item from the favorites playlist.
+
+```typescript
+toggleFavorite(
+  itemId: string,
+  isFavorite: boolean,
+  libraryName: string
+): Promise<void>
+```
+
+<ParamField path="itemId" type="string" required>
+  Plex ratingKey of the video
+</ParamField>
+
+<ParamField path="isFavorite" type="boolean" required>
+  Current status: true = currently favorited (will remove), false = not favorited (will add)
+</ParamField>
+
+<ParamField path="libraryName" type="string" required>
+  Library name for playlist lookup/creation
+</ParamField>
+
+### Example
+
+```typescript
+// Load favorites
+const favoriteIds = await client.getFavorites('Movies');
+
+// Check if video is favorited
+const isFavorite = favoriteIds.has(video.Id);
+
+// Toggle favorite (add if not favorited, remove if favorited)
+await client.toggleFavorite(video.Id, isFavorite, 'Movies');
+
+// Playlist is auto-created on first favorite if it doesn't exist
+```
+
+## Complete Usage Example
+
+```typescript
+import { ClientFactory } from './services/clientFactory';
+
+// Authenticate with X-Plex-Token
+const config = await ClientFactory.authenticate(
+  'plex',
+  'https://192.168.1.100:32400',
+  'PlexUser',
+  'YOUR_X_PLEX_TOKEN'
+);
+
+const client = ClientFactory.create(config);
+
+// Get libraries
+const libraries = await client.getLibraries();
+const tvLib = libraries.find(l => l.CollectionType === 'show');
+
+// Load random horizontal videos
+const { items } = await client.getVideos(
+  tvLib.Id,
+  tvLib.Name,
+  'random',
+  0,
+  15,
+  'horizontal'
+);
+
+// Check favorites
+const favoriteIds = await client.getFavorites(tvLib.Name);
+
+items.forEach(video => {
+  const url = client.getVideoUrl(video);
+  const thumb = client.getImageUrl(video.Id);
+  const isFav = favoriteIds.has(video.Id);
+  
+  console.log(`${video.Name} - Favorite: ${isFav}`);
+  console.log(`Stream: ${url}`);
+  console.log(`Thumb: ${thumb}`);
+});
+```
+
+## Implementation Details
+
+### Headers
+
+All requests include:
+- `Accept: application/json`
+- `X-Plex-Token: {token}`
+
+### Plex Item Mapping
+
+Plex metadata is mapped to EmbyItem format:
+- `ratingKey` → `Id`
+- `title` → `Name`
+- `type` → `Type`
+- `summary` → `Overview`
+- `year` → `ProductionYear`
+- `Media[0].width` → `Width`
+- `Media[0].height` → `Height`
+- `duration` → `RunTimeTicks` (converted: duration * 10000)
+- `thumb` → Stored in `_PlexThumb` (internal)
+- `Media[0].Part[0].key` → Stored in `_PlexKey` (internal)
+
+### Playlist URIs
+
+When managing favorites, items are referenced using:
+```
+server://{MachineIdentifier}/com.plexapp.plugins.library/library/metadata/{ratingKey}
+```
+
+### Orientation Filtering
+
+Same as EmbyClient:
+- **Vertical**: `height >= width * 0.8`
+- **Horizontal**: `width > height`
+- **Both**: No filtering
+
+## See Also
+
+- [MediaClient](/api/media-client) - Base class reference
+- [EmbyClient](/api/emby-client) - Emby/Jellyfin implementation
+- [Types](/api/types) - Type definitions

@@ -1,0 +1,193 @@
+---
+title: 'Server Setup'
+description: 'Connect EmbyTok to Emby, Jellyfin, or Plex media servers'
+---
+
+EmbyTok supports connecting to Emby, Jellyfin, and Plex media servers. This guide covers the authentication process and configuration options for each server type.
+
+## Supported Server Types
+
+EmbyTok can connect to:
+
+- **Emby / Jellyfin** - Full support with native API authentication
+- **Plex** - Using X-Plex-Token authentication
+- **Local Folder** - Browse videos directly from your device
+- **Folder Service** - LAN-based file server for sharing videos across devices
+
+## Connecting to Emby/Jellyfin
+
+<Steps>
+  <Step title="Enter server URL">
+    Input your Emby or Jellyfin server address in the format:
+    ```
+    http://192.168.1.100:8096
+    ```
+    
+    The URL will be automatically normalized - you can enter it with or without `http://`.
+  </Step>
+
+  <Step title="Provide credentials">
+    Enter your username and password. For Emby/Jellyfin:
+    - Username is **required**
+    - Password is optional (leave blank for users without passwords)
+  </Step>
+
+  <Step title="Authenticate">
+    Click "Connect" to authenticate. EmbyTok will:
+    - Send credentials to `/Users/AuthenticateByName` endpoint
+    - Receive an access token and user ID
+    - Store the configuration in localStorage
+  </Step>
+</Steps>
+
+### Authentication Headers
+
+EmbyTok uses the following authentication header format:
+
+```typescript
+'X-Emby-Authorization': `MediaBrowser Client="EmbyTok Web", Device="Web Browser", DeviceId="embytok-web-emby", Version="1.0.0", Token="${accessToken}"`
+```
+
+### Server Configuration Object
+
+After successful authentication, the following configuration is stored:
+
+<ParamField path="url" type="string" required>
+  Server URL without trailing slash (e.g., `http://192.168.1.100:8096`)
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  User's display name from the server
+</ParamField>
+
+<ParamField path="userId" type="string" required>
+  Unique user identifier from Emby/Jellyfin
+</ParamField>
+
+<ParamField path="token" type="string" required>
+  Access token for API requests
+</ParamField>
+
+<ParamField path="serverType" type="string" required>
+  Set to `'emby'` for both Emby and Jellyfin servers
+</ParamField>
+
+### CORS Configuration
+
+EmbyTok requires CORS to be enabled on your Emby/Jellyfin server. If you encounter connection errors, ensure:
+
+1. CORS is enabled in your server settings
+2. The EmbyTok web app origin is allowed
+3. Your server is accessible from the client device
+
+## Connecting to Plex
+
+<Steps>
+  <Step title="Obtain X-Plex-Token">
+    Get your Plex token from:
+    - Plex Web App → Settings → Account → Show Advanced
+    - Or extract from your Plex Media Server XML files
+  </Step>
+
+  <Step title="Enter server details">
+    - **Server URL**: `http://192.168.1.10:32400`
+    - **Username**: Optional (defaults to "Plex User")
+    - **Password**: Enter your X-Plex-Token here
+  </Step>
+
+  <Step title="Connect">
+    EmbyTok will:
+    - Fetch machine identifier from `/identity` endpoint
+    - Validate the token
+    - Store configuration with `serverType: 'plex'`
+  </Step>
+</Steps>
+
+### Plex Authentication Headers
+
+```typescript
+{
+  'Accept': 'application/json',
+  'X-Plex-Token': token
+}
+```
+
+### Machine Identifier
+
+Plex uses a machine identifier for constructing playlist URIs. EmbyTok automatically:
+
+1. Fetches the identifier from `/identity` endpoint
+2. Stores it as `userId` in the configuration
+3. Uses it for favorite playlist operations:
+
+```typescript
+const itemUri = `server://${machineId}/com.plexapp.plugins.library/library/metadata/${itemId}`;
+```
+
+## User Settings Storage
+
+All server configurations are stored in browser localStorage:
+
+```typescript
+localStorage.setItem('embyConfig', JSON.stringify({
+  url: 'http://192.168.1.100:8096',
+  username: 'John',
+  userId: 'abc123',
+  token: 'xyz789',
+  serverType: 'emby'
+}));
+```
+
+### Security Considerations
+
+<Warning>
+  Tokens and credentials are stored in browser localStorage. For enhanced security:
+  - Use HTTPS for production deployments
+  - Regularly rotate your access tokens
+  - Use server-side session management in production environments
+</Warning>
+
+## Login Component
+
+The login interface is implemented in `components/Login.tsx` with the following features:
+
+- Server type selector (Emby/Jellyfin, Plex, Local, Folder Service)
+- Dynamic form fields based on selected server type
+- Real-time URL normalization
+- Error handling with user-friendly messages
+- Support for both authenticated and guest users
+
+### URL Normalization
+
+```typescript
+const normalizeServerUrl = (rawUrl: string) => {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed.replace(/\/$/, '');
+  }
+  return `http://${trimmed}`.replace(/\/$/, '');
+};
+```
+
+This ensures URLs are properly formatted regardless of how users input them.
+
+## Error Handling
+
+Common connection errors and their solutions:
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| "Authentication failed" | Invalid credentials | Verify username/password or token |
+| "CORS error" | Server doesn't allow origin | Enable CORS on media server |
+| "Connection refused" | Server not accessible | Check server URL and network |
+| "Plex connection failed" | Invalid token | Use valid X-Plex-Token |
+
+## Next Steps
+
+After connecting to your server:
+
+- Browse your media libraries
+- Configure video orientation filters
+- Set up favorites and playlists
+- Explore the admin panel (for Folder Service mode)
