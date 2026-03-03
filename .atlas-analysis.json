@@ -1,0 +1,104 @@
+{
+  "projectType": "saas",
+  "projectName": "EmbyTok",
+  "projectDescription": "A TikTok-style vertical video browser for Emby media servers with cross-platform support.",
+  "theme": "almond",
+  "primaryColor": "#8b5cf6",
+  "lightColor": "#a78bfa",
+  "darkColor": "#6d28d9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Installation",
+            "pages": [
+              "installation/web",
+              "installation/docker",
+              "installation/android",
+              "installation/ios"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/video-browsing",
+              "features/media-libraries",
+              "features/folder-server",
+              "features/playback-controls"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/server-setup",
+              "configuration/folder-service",
+              "configuration/admin-panel"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/emby-setup",
+              "guides/plex-setup",
+              "guides/local-folders",
+              "guides/network-deployment"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Client APIs",
+            "pages": [
+              "api/media-client",
+              "api/emby-client",
+              "api/plex-client",
+              "api/folder-client"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "TikTok-style vertical video browsing with swipe navigation",
+    "Multi-server support (Emby, Plex, local folders, LAN file server)",
+    "Cross-platform apps (Web, Android, iOS/iPadOS, Apple Watch)",
+    "Media library management with favorites and collections",
+    "LAN folder server mode for local network streaming",
+    "Responsive design with grid and feed view modes",
+    "Orientation filtering and automatic layout optimization",
+    "PWA support with offline capabilities"
+  ],
+  "publicApiSurface": [
+    "MediaClient - Abstract base class for media server clients",
+    "EmbyClient - Emby server integration",
+    "PlexClient - Plex server integration", 
+    "FolderServerClient - LAN folder server client",
+    "LocalClient - Local file system client",
+    "ClientFactory - Factory for creating client instances",
+    "ServerConfig - Server configuration interface",
+    "EmbyItem - Media item data structure",
+    "EmbyLibrary - Media library structure",
+    "VideoResponse - Paginated video response",
+    "FeedType - Content feed type ('latest', 'random', 'favorites')",
+    "OrientationMode - Video orientation filter ('vertical', 'horizontal', 'both')"
+  ]
+}
